@@ -111,10 +111,11 @@ fs.writeFileSync(OUT + 'route/index.json', JSON.stringify({ size: TS, ntx, nty, 
 const lens = Object.values(down).map((d) => d.length);
 console.log('route tiles', ntx * nty, 'max downstream tiles', Math.max(...lens), 'mean', (lens.reduce((a, b) => a + b) / lens.length).toFixed(1));
 
-// 3. view grid heights (R,G) for the 3D mesh
-const v = grid(VIEW), vbuf = Buffer.alloc(VIEW.nx * VIEW.ny * 3);
-for (let k = 0; k < v.length; k++) { const e = Math.round(v[k]); vbuf[3 * k] = e >> 8; vbuf[3 * k + 1] = e & 255; }
-await sharp(vbuf, { raw: { width: VIEW.nx, height: VIEW.ny, channels: 3 } }).png({ compressionLevel: 9 }).toFile(OUT + 'height.png');
+// 3. view grid heights for the 3D mesh (display only): 8-bit, value = round(√h · 2.68),
+// so steps are ≤ 8 m below 500 m and ≤ 30 m on the highest peaks. Scenario maths use route tiles.
+const v = grid(VIEW), vbuf = Buffer.alloc(VIEW.nx * VIEW.ny);
+for (let k = 0; k < v.length; k++) vbuf[k] = Math.min(255, Math.round(Math.sqrt(v[k]) * 2.68));
+await sharp(vbuf, { raw: { width: VIEW.nx, height: VIEW.ny, channels: 1 } }).png({ compressionLevel: 9 }).toFile(OUT + 'height.png');
 
 // 4. texture: hypsometric tint × hillshade, rivers from accumulation, outside Nepal dimmed
 const TXW = 2048, TXH = Math.round((TXW * (BOX.n - BOX.s)) / (BOX.e - BOX.w)), tex = Buffer.alloc(TXW * TXH * 3);

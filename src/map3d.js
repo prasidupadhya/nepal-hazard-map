@@ -69,7 +69,7 @@ export async function init(el, { onPick: pick, onFrame: frame } = {}) {
 
   const [h, tex] = await Promise.all([pixels('terrain/height.png'), new THREE.TextureLoader().loadAsync('terrain/texture-1024.jpg')]);
   heights = new Float32Array(VIEW.nx * VIEW.ny);
-  for (let k = 0; k < heights.length; k++) heights[k] = h[4 * k] * 256 + h[4 * k + 1];
+  for (let k = 0; k < heights.length; k++) heights[k] = (h[4 * k] / 2.68) ** 2; // see bake-terrain.js step 3
   tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
   uni.map.value = tex;
   const ov = new THREE.DataTexture(new Uint8Array(VIEW.nx * VIEW.ny), VIEW.nx, VIEW.ny, THREE.RedFormat);
