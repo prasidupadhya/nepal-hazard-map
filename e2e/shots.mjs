@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 const { chromium } = createRequire(import.meta.url)(process.env.PW);
-const OUT = process.argv[2], BASE = 'http://localhost:4173/';
+const OUT = process.argv[2], BASE = process.env.BASE || 'http://localhost:4180/';
 const b = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 const p = await b.newPage({ viewport: { width: 1280, height: 800 } });
 await p.goto(BASE + '#/glof'); await p.waitForSelector('#run'); await p.waitForTimeout(800);

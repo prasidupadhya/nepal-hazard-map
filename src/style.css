@@ -75,7 +75,7 @@ td.n { white-space: nowrap; }
 .mmi { display: inline-block; min-width: 2.2em; text-align: center; border-radius: 6px; padding: 0 4px; color: #111; font-weight: 700; }
 .note { font-size: 13px; color: var(--mut); }
 .timeline { display: flex; gap: 10px; align-items: center; }
-.timeline output { min-width: 5.5em; text-align: right; font-variant-numeric: tabular-nums; }
+.timeline output { min-width: 6.5em; white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; }
 .print-only { display: none; }
 @media (max-width: 860px) {
   main { grid-template-columns: 1fr; grid-template-rows: 56dvh auto; height: auto; }

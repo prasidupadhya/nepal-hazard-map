@@ -118,7 +118,7 @@ const dataView = {
       archiveMonths ??= fetch('data/archive/index.json').then((r) => r.json()).then((j) => Object.entries(j.months).sort((a, b) => (a[0] < b[0] ? 1 : -1)));
       const months = await archiveMonths; if (!live()) return;
       const oldest = all.length ? all.at(-1).at.slice(0, 7) : '9999';
-      let mi = months.findIndex(([m]) => m < oldest);
+      let mi = months.findIndex(([m]) => m <= oldest); // include the boundary month: it can hold older rows too (dedupe by id below)
       const btn = () => { more.innerHTML = mi >= 0 && mi < months.length ? `<button class="btn ghost" type="button">${t('loadOlder')}</button>` : `<span class="note">${t('noOlder')}</span>`; };
       more.onclick = async (e) => {
         if (!e.target.closest('button')) return;
@@ -128,7 +128,8 @@ const dataView = {
         while (mi >= 0 && mi < months.length && n < 20) { if (months[mi][1][tab] > 0) { pick.push(months[mi][0]); n += months[mi][1][tab]; } mi++; }
         const got = await Promise.all(pick.map((m) => fetch(`data/archive/${m}.json`).then((r) => r.json())));
         const have = new Set(all.map((x) => x.id));
-        for (const g of got) all = all.concat(g[tab].filter((x) => !have.has(x.id)));
+        for (const g of got) for (const x of g[tab]) if (!have.has(x.id)) { have.add(x.id); all.push(x); }
+        all.sort((a, b) => Date.parse(b.at) - Date.parse(a.at) || b.id - a.id);
         draw(); btn();
       };
       btn();

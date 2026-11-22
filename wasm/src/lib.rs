@@ -1,7 +1,4 @@
 // Same maths as src/scenario.js (the JS version is the test oracle).
-#![no_std]
-#[panic_handler]
-fn panic(_: &core::panic::PanicInfo) -> ! { loop {} }
 
 const W: f64 = 79.9; const N: f64 = 30.5;
 const RSTEP: f64 = 0.005; const RNX: i32 = 1680; const RNY: i32 = 850;
@@ -10,17 +7,20 @@ const D8: [(i32, i32); 8] = [(1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1),
 const PLAINS_M: i16 = 120;
 
 #[inline] fn km_lon(lat: f64) -> f64 { 111.32 * libm::cos(lat * core::f64::consts::PI / 180.0) }
+#[inline] fn sqrt(x: f64) -> f64 { x.sqrt() } // std: native f64.sqrt instruction (libm's is software)
+#[inline] fn hyp(a: f64, b: f64) -> f64 { sqrt(a * a + b * b) }
 #[inline] fn clamp(m: f64) -> f64 { if m < 1.0 { 1.0 } else if m > 10.0 { 10.0 } else { m } }
 
 static mut HEAP: [u8; 8 << 20] = [0; 8 << 20];
 static mut TOP: usize = 0;
 #[no_mangle] pub extern "C" fn reset() { unsafe { TOP = 0; } }
 #[no_mangle] pub extern "C" fn alloc(n: usize) -> *mut u8 {
-    unsafe { let p = (TOP + 7) & !7; TOP = p + n; core::ptr::addr_of_mut!(HEAP).cast::<u8>().add(p) }
+    // align the absolute address (the static's own alignment is only 1 byte)
+    unsafe { let base = core::ptr::addr_of_mut!(HEAP).cast::<u8>(); let p = ((base as usize + TOP + 7) & !7) - base as usize; TOP = p + n; base.add(p) }
 }
 
 fn mmi(m: f64, d: f64) -> f64 {
-    let r = libm::sqrt(d * d + 196.0); let lr = libm::log10(r);
+    let r = sqrt(d * d + 196.0); let lr = libm::log10(r);
     let b = { let x = libm::log10(r / 50.0); if x > 0.0 { x } else { 0.0 } };
     12.27 + 2.27 * (m - 6.0) + 0.1304 * (m - 6.0) * (m - 6.0) - 1.3 * lr - 0.000707 * r + 1.95 * b - 0.577 * m * lr
 }
@@ -36,14 +36,14 @@ pub extern "C" fn shaking_grid(m: f64, lon0: f64, lat0: f64, strike: f64, step: 
         for i in 0..nx {
             let x = (W + (i as f64 + 0.5) * step - lon0) * kx;
             let mut t = x * ux + y * uy; if t < -half { t = -half } if t > half { t = half }
-            let d = libm::hypot(x - t * ux, y - t * uy);
+            let d = hyp(x - t * ux, y - t * uy);
             o[(j * nx + i) as usize] = clamp(mmi(m, d)) as f32;
         }
     }
 }
 
 fn hyd(q: f64, n: f64, a: f64, s: f64) -> (f64, f64) {
-    let b = a * libm::sqrt(q); let h = libm::pow(q * n / (b * libm::sqrt(s)), 0.6); let v = q / (b * h);
+    let b = a * sqrt(q); let h = libm::pow(q * n / (b * sqrt(s)), 0.6); let v = q / (b * h);
     let c = 5.0 / 3.0 * v; (h, if c > 15.0 { 15.0 } else { c })
 }
 
@@ -59,7 +59,7 @@ pub extern "C" fn glof(dir: *const u8, elev: *const i16, lon: f64, lat: f64, vlo
     while cnt < max && i >= 0 && j >= 0 && i < RNX && j < RNY {
         let k = (j * RNX + i) as usize;
         let lo = W + (i as f64 + 0.5) * RSTEP; let la = N - (j as f64 + 0.5) * RSTEP;
-        if cnt > 0 { let p = ((cnt - 1) * 10) as usize; km += libm::hypot((lo - o[p]) * km_lon(la), (la - o[p + 1]) * KM_LAT); }
+        if cnt > 0 { let p = ((cnt - 1) * 10) as usize; km += hyp((lo - o[p]) * km_lon(la), (la - o[p + 1]) * KM_LAT); }
         let p = (cnt * 10) as usize; o[p] = lo; o[p + 1] = la; o[p + 2] = km; o[p + 3] = elev[k] as f64; cnt += 1;
         let d = dir[k]; if d == 0 || elev[k] < PLAINS_M { break; }
         i += D8[(d - 1) as usize].0; j += D8[(d - 1) as usize].1;
