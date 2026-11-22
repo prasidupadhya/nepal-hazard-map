@@ -54,7 +54,7 @@ void main(){
 export async function init(el, { onPick: pick, onFrame: frame } = {}) {
   host = el; onPick = pick; onFrame = frame;
   renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: false });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setPixelRatio(pr);
   renderer.setClearColor(0x0d1620);
   el.appendChild(renderer.domElement);
   scene = new THREE.Scene();
@@ -102,11 +102,26 @@ function resize() {
 }
 export const requestRender = () => { dirty = true; };
 
+// Adaptive resolution: while frames render back to back, drop the pixel ratio when
+// they are slow (cheap phone GPUs are fill-rate bound) and raise it when there is headroom.
+const MAX_PR = Math.min(devicePixelRatio, 2);
+let pr = MAX_PR, lastT = 0, prevRendered = false; const ft = [];
+function adapt(now, rendered) {
+  const d = now - lastT, cont = rendered && prevRendered; lastT = now; prevRendered = rendered;
+  if (!rendered) return;
+  if (!cont) { ft.length = 0; return; } // only judge back-to-back frames
+  ft.push(d); if (ft.length < 20) return;
+  const m = ft.sort((a, b) => a - b)[10]; ft.length = 0;
+  const next = m > 24 ? Math.max(1, pr - 0.25) : m < 14 ? Math.min(MAX_PR, pr + 0.25) : pr;
+  if (next !== pr) { pr = next; renderer.setPixelRatio(pr); resize(); }
+}
+
 function loop(now) {
   requestAnimationFrame(loop);
   if (anim) { const p = Math.min(1, (now - anim.t0) / anim.ms); anim.step(p < 0.5 ? 4 * p * p * p : 1 - (-2 * p + 2) ** 3 / 2); if (p >= 1) anim = null; dirty = true; }
   if (onFrame && onFrame(now)) dirty = true;
   const moved = controls.update();
+  adapt(now, dirty || moved);
   if (dirty || moved) { renderer.render(scene, camera); dirty = false; if (terrain && !firstFrame) { firstFrame = true; performance.mark('map-ready'); } }
 }
 
