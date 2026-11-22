@@ -75,7 +75,7 @@ for (const tab of ['incidents', 'quakes']) {
   await page.goto(BASE + '#/data/' + tab); await page.waitForSelector('#rows li');
   while (await page.$('#more button')) { await page.click('#more button'); await page.waitForFunction(() => document.querySelector('#more button') || /No older/.test(document.querySelector('#more').textContent)); }
   const want = await page.evaluate(async (tab) => { const ix = await (await fetch('data/archive/index.json')).json(); const ids = new Set(); for (const m of Object.keys(ix.months)) for (const x of (await (await fetch('data/archive/' + m + '.json')).json())[tab]) ids.add(x.id); return ids.size; }, tab);
-  const got = await page.$$eval('#rows li', (l) => l.length);
+  const got = await page.$$eval('#rows li', (l) => l.reduce((n, x) => n + (+x.dataset.n || 1), 0)); // merged duplicate reports count each record
   ok(got === want, `all archived ${tab} reachable via Load older (${got}/${want})`);
 }
 await browser.close();

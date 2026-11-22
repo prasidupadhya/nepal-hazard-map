@@ -36,6 +36,14 @@ export const T = {
     level: 'Level', warn: 'Warning', danger: 'Danger', m: 'm', mm: 'mm', rain1: 'Last 1 h', rain24: 'Last 24 h',
     mag: 'Magnitude', loadOlder: 'Load older', noOlder: 'No older records', loading: 'Loading…', hazard: { 11: 'Flood', 26: 'Glacial lake outburst', 28: 'Inundation', 8: 'Earthquake' },
     loss: 'Loss record', verified: 'verified', filter: 'Filter by name',
+    glance: {
+      h: 'Today at a glance', rivers: 'Rivers', rain: 'Rain', quakes: 'Earthquakes', incidents: 'Flood reports',
+      allBelow: (n) => `All ${n} river gauges are below warning level.`, someAbove: (n) => `${n} river gauge${n > 1 ? 's are' : ' is'} at warning or danger level:`,
+      wettest: (mm, at) => `Most rain in the last 24 hours: ${mm} mm at ${at}.`, dry: (n, all) => `${n} of ${all} stations recorded no rain.`, noRain: 'No station recorded rain in the last 24 hours.',
+      lastQuake: (m, at, ago) => `Latest on record: magnitude ${m}, ${at}, ${ago}.`, lastReport: (ago, n) => `Latest report ${ago}. ${n} in the last 30 days.`,
+      updated: (ago, src) => `Newest record ${ago}, from ${src}.`, reports: (n) => `${n} reports`, alerts: 'At warning or danger level', gauges: (n) => `${n} gauges`, noRainList: (n) => `${n} stations with no rain`,
+      ofWarn: 'warning', ofDanger: 'danger', noLevels: 'No warning level published', other: 'Other basins', basinsNote: 'Grouped by river basin. Open a basin to see its gauges.',
+    },
     glof: {
       h: 'What if a glacial lake bursts?', lead: 'Choose one of the 47 potentially dangerous glacial lakes whose floods would reach Nepal, then set how much water it could release.',
       lake: 'Lake', volume: 'Water released (million m³)', from: 'from', to: 'to',
@@ -90,6 +98,14 @@ export const T = {
     level: 'सतह', warn: 'चेतावनी', danger: 'खतरा', m: 'मि.', mm: 'मि.मि.', rain1: 'पछिल्लो १ घण्टा', rain24: 'पछिल्लो २४ घण्टा',
     mag: 'म्याग्निच्युड', loadOlder: 'पुराना हेर्नुहोस्', noOlder: 'थप पुराना अभिलेख छैनन्', loading: 'लोड हुँदैछ…', hazard: { 11: 'बाढी', 26: 'हिमताल विस्फोटन', 28: 'डुबान', 8: 'भूकम्प' },
     loss: 'क्षति अभिलेख', verified: 'प्रमाणित', filter: 'नामबाट छान्नुहोस्',
+    glance: {
+      h: 'आजको संक्षेप', rivers: 'नदी', rain: 'वर्षा', quakes: 'भूकम्प', incidents: 'बाढी घटना',
+      allBelow: (n) => `सबै ${n} नदी मापन केन्द्र चेतावनी तहभन्दा तल छन्।`, someAbove: (n) => `${n} नदी मापन केन्द्र चेतावनी वा खतरा तहमा छन्:`,
+      wettest: (mm, at) => `पछिल्लो २४ घण्टामा सबैभन्दा बढी वर्षा: ${at} मा ${mm} मि.मि.।`, dry: (n, all) => `${all} मध्ये ${n} केन्द्रमा वर्षा भएन।`, noRain: 'पछिल्लो २४ घण्टामा कुनै केन्द्रमा वर्षा भएन।',
+      lastQuake: (m, at, ago) => `पछिल्लो अभिलेख: म्याग्निच्युड ${m}, ${at}, ${ago}।`, lastReport: (ago, n) => `पछिल्लो घटना ${ago}। पछिल्लो ३० दिनमा ${n} वटा।`,
+      updated: (ago, src) => `पछिल्लो अभिलेख ${ago}, स्रोत: ${src}।`, reports: (n) => `${n} वटा सूचना`, alerts: 'चेतावनी वा खतरा तहमा', gauges: (n) => `${n} केन्द्र`, noRainList: (n) => `वर्षा नभएका ${n} केन्द्र`,
+      ofWarn: 'चेतावनी', ofDanger: 'खतरा', noLevels: 'चेतावनी तह प्रकाशित छैन', other: 'अन्य नदी बेसिन', basinsNote: 'नदी बेसिनअनुसार समूह। केन्द्रहरू हेर्न बेसिन खोल्नुहोस्।',
+    },
     glof: {
       h: 'हिमताल फुटे के हुन्छ?', lead: 'नेपालमा बाढी पुर्‍याउन सक्ने ४७ सम्भावित खतरनाक हिमतालमध्ये एउटा छान्नुहोस्, अनि कति पानी निस्कन सक्छ राख्नुहोस्।',
       lake: 'हिमताल', volume: 'निस्कने पानी (दस लाख घन मिटर)', from: 'देखि', to: 'सम्म',
@@ -111,6 +127,8 @@ export const T = {
 };
 export let lang = 'en';
 export const setLang = (l) => { lang = l; document.documentElement.lang = l === 'ne' ? 'ne' : 'en'; };
+// strings may be functions: tf('glance.dry', n, all)
+export const tf = (path, ...a) => { const v = t(path); return typeof v === 'function' ? v(...a) : v; };
 export const t = (path) => path.split('.').reduce((o, k) => (o == null ? o : o[k]), T[lang]) ?? path.split('.').reduce((o, k) => (o == null ? o : o[k]), T.en) ?? path;
 // Own Nepali formatting: many phone browsers ship without Nepali locale data.
 const DEV = '०१२३४५६७८९';
@@ -124,5 +142,8 @@ export const when = (iso) => {
   const hm = `${String(n.getUTCHours()).padStart(2, '0')}:${String(n.getUTCMinutes()).padStart(2, '0')}`;
   return lang === 'ne' ? digits(`${n.getUTCFullYear()} ${MON.ne[n.getUTCMonth()]} ${n.getUTCDate()}, ${hm}`) + ' (नेपाली समय)' : `${n.getUTCDate()} ${MON.en[n.getUTCMonth()]} ${n.getUTCFullYear()}, ${hm} NPT`;
 };
+// date only (for records that carry no time of day)
+export const day = (iso) => { const n = new Date(Date.parse(iso) + 345 * 60000); return lang === 'ne' ? digits(`${n.getUTCFullYear()} ${MON.ne[n.getUTCMonth()]} ${n.getUTCDate()}`) : `${n.getUTCDate()} ${MON.en[n.getUTCMonth()]} ${n.getUTCFullYear()}`; };
+export const monthYear = (iso) => { const n = new Date(Date.parse(iso) + 345 * 60000); return lang === 'ne' ? digits(`${MON.ne[n.getUTCMonth()]} ${n.getUTCFullYear()}`) : `${['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][n.getUTCMonth()]} ${n.getUTCFullYear()}`; };
 export const age = (iso, now = Date.now()) => { if (!iso) return '–'; const [n, u] = ageParts(iso, now); return `${num(n)} ${t('unit.' + u)} ${t('ago')}`; };
 export const name = (o) => (lang === 'ne' && o.ne ? o.ne : o.en);

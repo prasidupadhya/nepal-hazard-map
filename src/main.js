@@ -1,7 +1,6 @@
 import { T, t, setLang, lang, name, num } from './i18n.js';
 import { map, mapModule } from './map.js';
-import { VIEWS } from './views.js';
-import { LAKES } from './lakes.js';
+import { VIEWS, lakesReady } from './views.js';
 
 // The river network is the only layer on at first; the rest are a tap away in the map key.
 export const state = { latest: null, places: [], rivers: null, layers: { network: true, lakes: false, rivers: false, rain: false, quakes: false, incidents: false }, view: null };
@@ -149,7 +148,10 @@ export function drawLayers() {
   map.setPoints('rain', L.rain, () => LAYER_COLOR.rain, (r) => 8 + Math.min(10, (r.h24 || 0) / 10));
   map.setPoints('quakes', L.quakes.slice(0, 100), () => LAYER_COLOR.quakes, (q) => 4 + q.mag * 1.5);
   map.setPoints('incidents', L.incidents.filter((i) => i.ll), () => LAYER_COLOR.incidents, () => 8);
-  map.setPoints('lakes', LAKES, (l) => LAKE_RANK_COLOR[l.rank], () => 12);
+  lakesReady.then((LAKES) => {
+    map.setPoints('lakes', LAKES, (l) => LAKE_RANK_COLOR[l.rank], () => 12);
+    const only = state.view?.layers; map.showLayer('lakes', only ? only.includes('lakes') : state.layers.lakes && !state.view?.hideLayers);
+  });
   const only = state.view?.layers;
   for (const k in state.layers) map.showLayer(k, only ? only.includes(k) : state.layers[k] && !state.view?.hideLayers);
 }
@@ -160,5 +162,6 @@ const dataP = Promise.all([fetch('data/latest.json').then((r) => r.json()), fetc
 const mapP = mapModule.then((m) => { m.setOnView(onView); return m.init(document.getElementById('gl'), { onPick: (x) => state.view?.onPick?.(x), onFrame: (now) => state.view?.onFrame?.(now) }); });
 export const dataReady = dataP;
 export const mapReady = mapP;
-export const ready = Promise.all([dataP, mapP]).then(() => { drawLayers(); drawLabels(); return loadRivers(); });
+// rivers are decoded when the browser is idle, so they never compete with the first frames
+export const ready = Promise.all([dataP, mapP]).then(() => { drawLayers(); drawLabels(); (window.requestIdleCallback || setTimeout)(() => loadRivers(), { timeout: 1500 }); });
 route();

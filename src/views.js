@@ -1,9 +1,8 @@
-import { t, num, when, age, name, lang, digits } from './i18n.js';
+import { t, tf, num, when, day, age, name, lang, digits, monthYear } from './i18n.js';
 import { freshness } from './age.js';
 import { map } from './map.js';
 import { MMI_COLORS } from './colors.js';
 import { state, dataReady, mapReady, showChips, LAYER_COLOR, LAKE_RANK_COLOR } from './main.js';
-import { LAKES } from './lakes.js';
 import { PROVINCES } from './districts.js';
 import { VIEW, ROUTE, D8 } from './grid.js';
 import { makeRouteLoader } from './route-tiles.js';
@@ -63,6 +62,9 @@ async function routeFor(ll) {
 }
 
 // ---------- glacial lakes (ICIMOD 2020) ----------
+// Own chunk: starts loading at boot but never delays the first text on screen.
+export let LAKES = [];
+export const lakesReady = import('./lakes.js').then((m) => (LAKES = m.LAKES));
 const COUNTRY_ORDER = ['Nepal', 'Tibet, China', 'India'], RANK_ORDER = { I: 0, II: 1, III: 2 };
 const lakeLabel = (l) => `${name(l)}, ${l.rank}, ${lang === 'ne' ? l.basin[1] : l.basin[0]}`;
 function lakeOptions() {
@@ -96,7 +98,7 @@ function lakesThrough(cell) {
 }
 async function traceRiver(el, ll, live) {
   el.innerHTML = `<div class="callout"><p class="note">${t('loading')}</p></div>`;
-  const grid = await routeFor(ll); if (!live()) return;
+  const grid = await routeFor(ll); await lakesReady; if (!live()) return;
   const path = js.tracePath(grid, ...ll);
   const cell = Math.floor((30.5 - ll[1]) / ROUTE.step) * ROUTE.nx + Math.floor((ll[0] - 79.9) / ROUTE.step);
   // a gauge counts only if its nearest mapped river cell lies on this path (gauges just up a tributary do not)
@@ -172,27 +174,70 @@ const incidentCard = (i) => `<h3>${esc(lang === 'ne' && i.titleNe ? i.titleNe : 
 
 // ---------- DATA ----------
 let archiveMonths = null;
+// River basins as DHM names them (the source spells some differently: "Babai Basin", "mahakali", none).
+const BASIN_NE = { Koshi: 'कोशी', Narayani: 'नारायणी', Karnali: 'कर्णाली', Bagmati: 'बागमती', Mahakali: 'महाकाली', 'West Rapti': 'पश्चिम राप्ती', Babai: 'बबई', Kamala: 'कमला', Kankai: 'कन्काई', Mechi: 'मेची', Bheri: 'भेरी', Tinau: 'तिनाउ', Mohana: 'मोहना', Banganga: 'बाणगंगा', Keshaliya: 'केशलिया', Lalbakaiya: 'लालबकैया', Ratu: 'रातु', 'Balan-Khado': 'बलान-खाँडो' };
+const basinOf = (r) => { const b = (r.basin || '').replace(/\s+basin$/i, '').trim(), k = Object.keys(BASIN_NE).find((x) => x.toLowerCase() === b.toLowerCase()); return k || null; };
+// a gauge bar: level against the warning (and danger) marks
+function gauge(r) {
+  if (r.warn == null && r.danger == null) return ''; // nothing to compare against: no bar
+  const top = (r.danger ?? (r.warn ?? 1) * 1.25) * 1.15, pc = (v) => Math.max(0, Math.min(100, (v / top) * 100)).toFixed(1);
+  return `<span class="gauge ${lvlClass(r)}" aria-hidden="true"><i style="width:${pc(r.level ?? 0)}%"></i>${r.warn != null ? `<b class="w" style="left:${pc(r.warn)}%"></b>` : ''}${r.danger != null ? `<b class="d" style="left:${pc(r.danger)}%"></b>` : ''}</span>`;
+}
+const gaugeRow = (r) => `<li class="g"><span>${esc(r.name)}</span><span class="val ${lvlClass(r)}">${num(r.level, 2)} ${t('m')}</span>${gauge(r)}<span class="sub">${r.status !== 'BELOW WARNING LEVEL' ? `<span class="${lvlClass(r)}">${esc(t('status.' + r.status))}</span>` : ''}${r.warn != null ? `<span>${t('glance.ofWarn')} ${num(r.warn, 1)} ${t('m')}</span>` : ''}${r.danger != null ? `<span>${t('glance.ofDanger')} ${num(r.danger, 1)} ${t('m')}</span>` : ''}${r.warn == null && r.danger == null ? `<span>${t('glance.noLevels')}</span>` : ''}</span></li>`;
+// fixed scale so a drizzle never looks like a downpour: 100 mm in 24 h fills the bar (or the day's maximum, if higher)
+const rainRow = (max) => (r) => `<li class="g"><span>${esc(r.name)}</span><span class="val">${num(r.h24, 1)} ${t('mm')}</span><span class="gauge rain" aria-hidden="true"><i style="width:${((r.h24 / Math.max(100, max)) * 100).toFixed(1)}%"></i></span>${r.h1 > 0 ? `<span class="sub"><span>${t('rain1')} ${num(r.h1, 1)} ${t('mm')}</span></span>` : ''}</li>`;
+const quakeRow = (q) => `<li><span>${esc(q.place)}</span><span class="tag">M ${num(q.mag, 1)}</span><span class="sub"><span>${when(q.at)}</span></span></li>`;
+// BIPAD sometimes files the same place and date twice: show one row with the number of reports
+const incidentRow = (i) => `<li data-n="${i.n || 1}"><span>${esc(lang === 'ne' && i.titleNe ? i.titleNe : i.title)}</span><span class="tag">${t('hazard.' + i.hazard)}</span><span class="sub"><span>${/T00:00:00/.test(i.at) ? day(i.at) : when(i.at)}</span>${i.n > 1 ? `<span>${tf('glance.reports', num(i.n))}</span>` : ''}</span></li>`;
+function mergeSame(rows) { const out = [], seen = new Map(); for (const x of rows) { const k = `${x.hazard}|${x.title}|${x.at}`; if (seen.has(k)) seen.get(k).n++; else { const y = { ...x, n: 1 }; seen.set(k, y); out.push(y); } } return out; }
+const byMonth = (rows, fmt) => { let out = '', cur = null; for (const x of rows) { const m = x.at.slice(0, 7); if (m !== cur) { out += `${cur ? '</ul>' : ''}<h3 class="month">${monthYear(x.at)}</h3><ul class="list">`; cur = m; } out += fmt(x); } return out + (cur ? '</ul>' : ''); };
+
+function glance() {
+  const L = state.latest, now = Date.now(), alerts = L.rivers.filter((r) => r.status && r.status !== 'BELOW WARNING LEVEL');
+  const wet = L.rain.filter((r) => r.h24 > 0).sort((a, b) => b.h24 - a.h24), dry = L.rain.length - wet.length, q = L.quakes[0];
+  const recent = L.incidents.filter((i) => now - Date.parse(i.at) < 30 * 864e5).length;
+  const row = (cls, k, text) => `<li class="${cls}"><span class="k">${t('glance.' + k)}</span><span>${text}</span></li>`;
+  return `<section class="glance" aria-labelledby="gl-h"><h2 id="gl-h">${t('glance.h')}</h2><ul>
+    ${row(alerts.some((r) => r.status === 'DANGER LEVEL') ? 'danger' : alerts.length ? 'warn' : 'ok', 'rivers', alerts.length ? `${tf('glance.someAbove', num(alerts.length))} ${alerts.map((r) => esc(r.name)).join(', ')}` : tf('glance.allBelow', num(L.rivers.length)))}
+    ${row('', 'rain', wet.length ? `${tf('glance.wettest', num(wet[0].h24, 1), esc(wet[0].name))} ${tf('glance.dry', num(dry), num(L.rain.length))}` : t('glance.noRain'))}
+    ${q ? row('', 'quakes', tf('glance.lastQuake', num(q.mag, 1), esc(q.place), age(q.at, now))) : ''}
+    ${L.incidents[0] ? row('', 'incidents', tf('glance.lastReport', age(L.incidents[0].at, now), num(recent))) : ''}
+  </ul></section>`;
+}
+
 const dataView = {
   full: true,
   async enter(el, live) {
     el.innerHTML = `<h1>${t('nav.data')}</h1><p class="lead">${t('loading')}</p>`;
     await dataReady; if (!live()) return;
-    const tab = location.hash.split('/')[2] || 'rivers';
-    el.innerHTML = `<h1>${t('nav.data')}</h1>${printBlock('')}${feedCards()}
-      <div class="tabs" role="tablist">${['rivers', 'rain', 'quakes', 'incidents'].map((k) => `<button role="tab" aria-selected="${k === tab}" data-k="${k}">${t('feeds.' + k)}</button>`).join('')}</div>
+    const tab = location.hash.split('/')[2] || 'rivers', L = state.latest, S = L.sources[tab] || {};
+    const counts = { rivers: L.rivers.length, rain: L.rain.length, quakes: L.quakes.length, incidents: L.incidents.length };
+    el.innerHTML = `<h1>${t('nav.data')}</h1>${printBlock('')}${glance()}
+      <div class="tabs" role="tablist">${['rivers', 'rain', 'quakes', 'incidents'].map((k) => `<button role="tab" aria-selected="${k === tab}" data-k="${k}">${t('feeds.' + k)} <span class="count">${num(counts[k])}</span></button>`).join('')}</div>
+      <p class="feedline">${S.ok === false ? `<span class="state err">${t('failed')}</span> ` : ''}${tf('glance.updated', age(S.newest), esc(t('origin.' + S.origin)))}${S.expect_h ? '' : ` ${t('quakeAgeNote')}`}</p>
       <input class="filter" type="search" placeholder="${t('filter')}" aria-label="${t('filter')}">
-      <ul class="list" id="rows"></ul><p class="row noprint" id="more"></p>
+      <div id="rows"></div><p class="row noprint" id="more"></p>
       <p class="noprint"><button class="btn ghost" type="button" id="pr">${t('print')}</button></p>`;
     el.querySelector('.tabs').onclick = (e) => { const b = e.target.closest('[data-k]'); if (b) location.hash = '#/data/' + b.dataset.k; };
     el.querySelector('#pr').onclick = doPrint;
-    const L = state.latest, rows = { rivers: L.rivers, rain: L.rain, quakes: L.quakes, incidents: L.incidents }[tab];
-    const fmt = { rivers: riverRow,
-      rain: (r) => `<li><span>${esc(r.name)}</span><span class="val">${num(r.h24, 1)} ${t('mm')}</span><span class="sub"><span>${t('rain24')}</span><span>${t('rain1')} ${num(r.h1, 1)} ${t('mm')}</span><span>${age(r.at)}</span></span></li>`,
-      quakes: (q) => `<li><span>${esc(q.place)}</span><span class="val">M ${num(q.mag, 1)}</span><span class="sub"><span>${when(q.at)}</span><span>${age(q.at)}</span></span></li>`,
-      incidents: (i) => `<li><span>${esc(lang === 'ne' && i.titleNe ? i.titleNe : i.title)}</span><span class="sub"><span>${t('hazard.' + i.hazard)}</span><span>${when(i.at)}</span><span>${age(i.at)}</span></span></li>` }[tab];
-    let all = rows.slice();
-    const ul = el.querySelector('#rows'), filter = el.querySelector('.filter');
-    const draw = () => { const q = filter.value.trim().toLowerCase(); ul.innerHTML = all.filter((x) => !q || (x.name || x.place || x.title || '').toLowerCase().includes(q) || (x.titleNe || '').includes(q)).map(fmt).join(''); };
+    let all = { rivers: L.rivers, rain: L.rain, quakes: L.quakes, incidents: L.incidents }[tab].slice();
+    const box = el.querySelector('#rows'), filter = el.querySelector('.filter');
+    const match = (x, q) => !q || (x.name || x.place || x.title || '').toLowerCase().includes(q) || (x.titleNe || '').includes(q);
+    const draw = () => {
+      const q = filter.value.trim().toLowerCase(), rows = all.filter((x) => match(x, q));
+      if (tab === 'rivers') {
+        const alerts = rows.filter((r) => r.status && r.status !== 'BELOW WARNING LEVEL'), rest = rows.filter((r) => !alerts.includes(r));
+        if (q) { box.innerHTML = `<ul class="list">${rows.map(gaugeRow).join('')}</ul>`; return; } // searching: one flat list
+        const groups = {}; for (const r of rest) (groups[basinOf(r) || ''] ??= []).push(r);
+        const names = Object.keys(groups).sort((a, b) => (!a) - (!b) || groups[b].length - groups[a].length);
+        box.innerHTML = `${alerts.length ? `<h3 class="month">${t('glance.alerts')}</h3><ul class="list">${alerts.map(gaugeRow).join('')}</ul>` : ''}
+          <p class="note">${t('glance.basinsNote')}</p>
+          ${names.map((b) => `<details class="group"><summary><span>${b ? esc(lang === 'ne' ? BASIN_NE[b] : b) : t('glance.other')}</span><span class="count">${tf('glance.gauges', num(groups[b].length))}</span></summary><ul class="list">${groups[b].map(gaugeRow).join('')}</ul></details>`).join('')}`;
+      } else if (tab === 'rain') {
+        const wet = rows.filter((r) => r.h24 > 0).sort((a, b) => b.h24 - a.h24), dry = rows.filter((r) => !(r.h24 > 0)), row = rainRow(wet[0]?.h24 || 0);
+        box.innerHTML = `<ul class="list">${wet.map(row).join('')}</ul>${dry.length ? `<details class="group"${q ? ' open' : ''}><summary><span>${tf('glance.noRainList', num(dry.length))}</span></summary><ul class="list">${dry.map(row).join('')}</ul></details>` : ''}`;
+      } else box.innerHTML = tab === 'quakes' ? byMonth(rows, quakeRow) : byMonth(mergeSame(rows), incidentRow);
+    };
     filter.oninput = draw; draw();
     if (tab === 'quakes' || tab === 'incidents') {
       const more = el.querySelector('#more');
@@ -224,6 +269,7 @@ const glofView = {
   hideLayers: true, layers: ['lakes', 'network'],
   async enter(el, live) {
     showChips(false, this.layers); map.clearShaking();
+    await lakesReady; if (!live()) return;
     const first = LAKES.find((l) => l.en === 'Tsho Rolpa');
     G ??= { lake: first, vol: first.vol.slice(), res: null, t: 0, playing: false, last: 0 };
     el.innerHTML = `<h1>${t('glof.h')}</h1><p class="lead">${t('glof.lead')}</p>
