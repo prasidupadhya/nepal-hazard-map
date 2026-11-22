@@ -31,6 +31,6 @@ node e2e/check.mjs       # browser checks (serve dist first: npx vite preview)
 ```
 
 ## Hosting (free)
-GitHub Pages: Settings → Pages → Source: **GitHub Actions**. The workflow in
-`.github/workflows/daily.yml` copies the data every day at 06:02 Nepal Time
-and redeploys.
+Vercel (Hobby): import this repository; it detects Vite (build `npm run build`,
+output `dist`). The workflow in `.github/workflows/daily.yml` copies the data every
+day at 06:02 Nepal Time, tests it and commits it; Vercel redeploys on that push.
