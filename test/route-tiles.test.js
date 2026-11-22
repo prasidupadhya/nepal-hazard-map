@@ -17,5 +17,5 @@ it('paths from loaded tiles equal the full-grid oracle (lakes + 300 random start
     await load(...ll); // shared loader accumulates tiles like the site does
   }
   const { grid } = await load(...LAKES[0].ll);
-  expect(glof(tracePath(grid, ...LAKES[0].ll), [75, 100])).toEqual(glof(tracePath(full, ...LAKES[0].ll), [75, 100]));
+  expect(glof(tracePath(grid, ...LAKES[0].ll), [43, 86])).toEqual(glof(tracePath(full, ...LAKES[0].ll), [43, 86]));
 }, 120000);

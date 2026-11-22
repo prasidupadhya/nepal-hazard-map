@@ -1,0 +1,570 @@
+{
+ "source": "ICIMOD (2020) Inventory of glacial lakes and identification of potentially dangerous glacial lakes in the Koshi, Gandaki, and Karnali river basins of Nepal, the Tibet Autonomous Region of China, and India. Research Report, Table 5.6. https://lib.icimod.org/records/p869r-n4132",
+ "note": "Coordinates are encoded in the lake ID (GL<lon x1000>E<lat x1000>N). Rank I = highest danger.",
+ "lakes": [
+  {
+   "no": 1,
+   "id": "GL087945E27781N",
+   "name": null,
+   "rank": "I",
+   "basin": "Tamor",
+   "country": "Nepal",
+   "ll": [
+    87.945,
+    27.781
+   ]
+  },
+  {
+   "no": 2,
+   "id": "GL087934E27790N",
+   "name": null,
+   "rank": "III",
+   "basin": "Tamor",
+   "country": "Nepal",
+   "ll": [
+    87.934,
+    27.79
+   ]
+  },
+  {
+   "no": 3,
+   "id": "GL087893E27694N",
+   "name": null,
+   "rank": "III",
+   "basin": "Tamor",
+   "country": "Nepal",
+   "ll": [
+    87.893,
+    27.694
+   ]
+  },
+  {
+   "no": 4,
+   "id": "GL087749E27816N",
+   "name": null,
+   "rank": "I",
+   "basin": "Tamor",
+   "country": "Nepal",
+   "ll": [
+    87.749,
+    27.816
+   ]
+  },
+  {
+   "no": 5,
+   "id": "GL087596E27705N",
+   "name": null,
+   "rank": "I",
+   "basin": "Arun",
+   "country": "Nepal",
+   "ll": [
+    87.596,
+    27.705
+   ]
+  },
+  {
+   "no": 6,
+   "id": "GL087632E27729N",
+   "name": null,
+   "rank": "III",
+   "basin": "Arun",
+   "country": "Nepal",
+   "ll": [
+    87.632,
+    27.729
+   ]
+  },
+  {
+   "no": 7,
+   "id": "GL087771E27926N",
+   "name": null,
+   "rank": "I",
+   "basin": "Arun",
+   "country": "China",
+   "ll": [
+    87.771,
+    27.926
+   ]
+  },
+  {
+   "no": 8,
+   "id": "GL087636E28093N",
+   "name": null,
+   "rank": "I",
+   "basin": "Arun",
+   "country": "China",
+   "ll": [
+    87.636,
+    28.093
+   ]
+  },
+  {
+   "no": 9,
+   "id": "GL087626E28052N",
+   "name": null,
+   "rank": "I",
+   "basin": "Arun",
+   "country": "China",
+   "ll": [
+    87.626,
+    28.052
+   ]
+  },
+  {
+   "no": 10,
+   "id": "GL087563E28178N",
+   "name": null,
+   "rank": "III",
+   "basin": "Arun",
+   "country": "China",
+   "ll": [
+    87.563,
+    28.178
+   ]
+  },
+  {
+   "no": 11,
+   "id": "GL087591E28229N",
+   "name": null,
+   "rank": "II",
+   "basin": "Arun",
+   "country": "China",
+   "ll": [
+    87.591,
+    28.229
+   ]
+  },
+  {
+   "no": 12,
+   "id": "GL087930E27949N",
+   "name": null,
+   "rank": "I",
+   "basin": "Arun",
+   "country": "China",
+   "ll": [
+    87.93,
+    27.949
+   ]
+  },
+  {
+   "no": 13,
+   "id": "GL088002E27928N",
+   "name": null,
+   "rank": "I",
+   "basin": "Arun",
+   "country": "China",
+   "ll": [
+    88.002,
+    27.928
+   ]
+  },
+  {
+   "no": 14,
+   "id": "GL088019E27928N",
+   "name": null,
+   "rank": "I",
+   "basin": "Arun",
+   "country": "China",
+   "ll": [
+    88.019,
+    27.928
+   ]
+  },
+  {
+   "no": 15,
+   "id": "GL088066E27933N",
+   "name": null,
+   "rank": "I",
+   "basin": "Arun",
+   "country": "China",
+   "ll": [
+    88.066,
+    27.933
+   ]
+  },
+  {
+   "no": 16,
+   "id": "GL088075E27946N",
+   "name": null,
+   "rank": "I",
+   "basin": "Arun",
+   "country": "China",
+   "ll": [
+    88.075,
+    27.946
+   ]
+  },
+  {
+   "no": 17,
+   "id": "GL088288E28017N",
+   "name": null,
+   "rank": "II",
+   "basin": "Arun",
+   "country": "China",
+   "ll": [
+    88.288,
+    28.017
+   ]
+  },
+  {
+   "no": 18,
+   "id": "GL086304E28374N",
+   "name": null,
+   "rank": "II",
+   "basin": "Arun",
+   "country": "China",
+   "ll": [
+    86.304,
+    28.374
+   ]
+  },
+  {
+   "no": 19,
+   "id": "GL087134E28069N",
+   "name": null,
+   "rank": "I",
+   "basin": "Arun",
+   "country": "China",
+   "ll": [
+    87.134,
+    28.069
+   ]
+  },
+  {
+   "no": 20,
+   "id": "GL087095E27829N",
+   "name": null,
+   "rank": "II",
+   "basin": "Arun",
+   "country": "Nepal",
+   "ll": [
+    87.095,
+    27.829
+   ]
+  },
+  {
+   "no": 21,
+   "id": "GL087092E27798N",
+   "name": "Lower Barun",
+   "rank": "I",
+   "basin": "Arun",
+   "country": "Nepal",
+   "ll": [
+    87.092,
+    27.798
+   ]
+  },
+  {
+   "no": 22,
+   "id": "GL086977E27711N",
+   "name": null,
+   "rank": "I",
+   "basin": "Dudh",
+   "country": "Nepal",
+   "ll": [
+    86.977,
+    27.711
+   ]
+  },
+  {
+   "no": 23,
+   "id": "GL086958E27755N",
+   "name": "Chamlang",
+   "rank": "II",
+   "basin": "Dudh",
+   "country": "Nepal",
+   "ll": [
+    86.958,
+    27.755
+   ]
+  },
+  {
+   "no": 24,
+   "id": "GL086957E27783N",
+   "name": "Hongu 2",
+   "rank": "I",
+   "basin": "Dudh",
+   "country": "Nepal",
+   "ll": [
+    86.957,
+    27.783
+   ]
+  },
+  {
+   "no": 25,
+   "id": "GL086935E27838N",
+   "name": "Hongu 1",
+   "rank": "I",
+   "basin": "Dudh",
+   "country": "Nepal",
+   "ll": [
+    86.935,
+    27.838
+   ]
+  },
+  {
+   "no": 26,
+   "id": "GL086928E27850N",
+   "name": null,
+   "rank": "I",
+   "basin": "Dudh",
+   "country": "Nepal",
+   "ll": [
+    86.928,
+    27.85
+   ]
+  },
+  {
+   "no": 27,
+   "id": "GL086917E27832N",
+   "name": null,
+   "rank": "I",
+   "basin": "Dudh",
+   "country": "Nepal",
+   "ll": [
+    86.917,
+    27.832
+   ]
+  },
+  {
+   "no": 28,
+   "id": "GL086858E27687N",
+   "name": null,
+   "rank": "I",
+   "basin": "Dudh",
+   "country": "Nepal",
+   "ll": [
+    86.858,
+    27.687
+   ]
+  },
+  {
+   "no": 29,
+   "id": "GL086925E27898N",
+   "name": "Imja Tsho",
+   "rank": "I",
+   "basin": "Dudh",
+   "country": "Nepal",
+   "ll": [
+    86.925,
+    27.898
+   ]
+  },
+  {
+   "no": 30,
+   "id": "GL086612E27779N",
+   "name": "Lumding",
+   "rank": "I",
+   "basin": "Dudh",
+   "country": "Nepal",
+   "ll": [
+    86.612,
+    27.779
+   ]
+  },
+  {
+   "no": 31,
+   "id": "GL086476E27861N",
+   "name": "Tsho Rolpa",
+   "rank": "I",
+   "basin": "Tama",
+   "country": "Nepal",
+   "ll": [
+    86.476,
+    27.861
+   ]
+  },
+  {
+   "no": 32,
+   "id": "GL086447E27946N",
+   "name": null,
+   "rank": "I",
+   "basin": "Tama",
+   "country": "China",
+   "ll": [
+    86.447,
+    27.946
+   ]
+  },
+  {
+   "no": 33,
+   "id": "GL086500E28033N",
+   "name": null,
+   "rank": "II",
+   "basin": "Tama",
+   "country": "China",
+   "ll": [
+    86.5,
+    28.033
+   ]
+  },
+  {
+   "no": 34,
+   "id": "GL086520E28073N",
+   "name": null,
+   "rank": "I",
+   "basin": "Tama",
+   "country": "China",
+   "ll": [
+    86.52,
+    28.073
+   ]
+  },
+  {
+   "no": 35,
+   "id": "GL086530E28135N",
+   "name": null,
+   "rank": "II",
+   "basin": "Tama",
+   "country": "China",
+   "ll": [
+    86.53,
+    28.135
+   ]
+  },
+  {
+   "no": 36,
+   "id": "GL086532E28185N",
+   "name": null,
+   "rank": "I",
+   "basin": "Tama",
+   "country": "China",
+   "ll": [
+    86.532,
+    28.185
+   ]
+  },
+  {
+   "no": 37,
+   "id": "GL086371E28238N",
+   "name": null,
+   "rank": "I",
+   "basin": "Tama",
+   "country": "China",
+   "ll": [
+    86.371,
+    28.238
+   ]
+  },
+  {
+   "no": 38,
+   "id": "GL086314E28194N",
+   "name": null,
+   "rank": "I",
+   "basin": "Tama",
+   "country": "China",
+   "ll": [
+    86.314,
+    28.194
+   ]
+  },
+  {
+   "no": 39,
+   "id": "GL086157E28303N",
+   "name": null,
+   "rank": "I",
+   "basin": "Sun",
+   "country": "China",
+   "ll": [
+    86.157,
+    28.303
+   ]
+  },
+  {
+   "no": 40,
+   "id": "GL086225E28346N",
+   "name": null,
+   "rank": "II",
+   "basin": "Sun",
+   "country": "China",
+   "ll": [
+    86.225,
+    28.346
+   ]
+  },
+  {
+   "no": 41,
+   "id": "GL085870E28360N",
+   "name": "Ganxico",
+   "rank": "II",
+   "basin": "Sun",
+   "country": "China",
+   "ll": [
+    85.87,
+    28.36
+   ]
+  },
+  {
+   "no": 42,
+   "id": "GL085838E28322N",
+   "name": "Lumichimi",
+   "rank": "II",
+   "basin": "Sun",
+   "country": "China",
+   "ll": [
+    85.838,
+    28.322
+   ]
+  },
+  {
+   "no": 43,
+   "id": "GL085630E28162N",
+   "name": null,
+   "rank": "I",
+   "basin": "Trishuli",
+   "country": "Nepal",
+   "ll": [
+    85.63,
+    28.162
+   ]
+  },
+  {
+   "no": 44,
+   "id": "GL085494E28508N",
+   "name": null,
+   "rank": "II",
+   "basin": "Trishuli",
+   "country": "China",
+   "ll": [
+    85.494,
+    28.508
+   ]
+  },
+  {
+   "no": 45,
+   "id": "GL084485E28488N",
+   "name": "Thulagi",
+   "rank": "I",
+   "basin": "Marsyangdi",
+   "country": "Nepal",
+   "ll": [
+    84.485,
+    28.488
+   ]
+  },
+  {
+   "no": 46,
+   "id": "GL082673E29802N",
+   "name": null,
+   "rank": "II",
+   "basin": "Mugu",
+   "country": "Nepal",
+   "ll": [
+    82.673,
+    29.802
+   ]
+  },
+  {
+   "no": 47,
+   "id": "GL080387E30445N",
+   "name": null,
+   "rank": "I",
+   "basin": "Kali",
+   "country": "India",
+   "ll": [
+    80.387,
+    30.445
+   ]
+  }
+ ]
+}

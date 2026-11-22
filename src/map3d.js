@@ -1,6 +1,9 @@
 // three.js terrain map. Renders on demand (only while something moves) to save battery.
 import * as THREE from 'three';
 import { MapControls } from 'three/examples/jsm/controls/MapControls.js';
+import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
+import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { BOX, VIEW, kmPerDegLon, KM_PER_DEG_LAT } from './grid.js';
 import { MMI_COLORS } from './colors.js';
 
@@ -11,6 +14,8 @@ export const toLL = (x, z) => [C.lon + x / KX, C.lat - z / KM_PER_DEG_LAT];
 
 const MIST = 0xe7ecea, BASE = 12; // page/fog colour; slab thickness below sea level (scene km)
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let labelCanvas, lctx, labels = []; const labelW = new Map(), lineMats = [], netObjs = [];
+let hidden = false, labelKey = '';
 let inset = 0, cssH = 1, lastView = [1, 0], firstFrame = false, renderer, scene, camera, controls, terrain, heights, host, dirty = true, anim = null, onPick = null, onFrame = null, onView = null;
 const layers = {};
 // shared by terrain, slab sides, points: rise = intro animation (0 → 1), fog follows camera distance
@@ -87,6 +92,9 @@ export async function init(el, { onPick: pick, onFrame: frame } = {}) {
   renderer.setPixelRatio(pr); ptUni.pr.value = pr;
   renderer.setClearColor(MIST);
   el.appendChild(renderer.domElement);
+  labelCanvas = document.createElement('canvas'); labelCanvas.className = 'labels'; labelCanvas.setAttribute('aria-hidden', 'true');
+  el.appendChild(labelCanvas); lctx = labelCanvas.getContext('2d');
+  document.fonts?.ready.then(() => { labelW.clear(); labelKey = ''; dirty = true; });
   scene = new THREE.Scene();
   scene.fog = new THREE.Fog(MIST, 900, 2600);
   camera = new THREE.PerspectiveCamera(40, 1, 1, 5000);
@@ -159,8 +167,11 @@ function intro() {
 function resize() {
   if (!renderer) return;
   const w = host.clientWidth, h = host.clientHeight;
-  if (!w || !h) return; // map hidden (data/about pages): keep the framebuffer as is
-  cssH = h; renderer.setSize(w, h, false);
+  hidden = !w || !h;
+  if (hidden) return; // map hidden (data/about pages): keep the framebuffer, render nothing until shown
+  cssH = h; labelKey = ''; renderer.setSize(w, h, false);
+  labelCanvas.width = Math.round(w * devicePixelRatio); labelCanvas.height = Math.round(h * devicePixelRatio);
+  for (const m of lineMats) m.resolution.set(w, h);
   // On desktop the sheet floats over the right of the map: shift the projection centre so that
   // flights and the overview centre in the part of the map people can see.
   const pr0 = document.getElementById('panel')?.getBoundingClientRect(), hr = host.getBoundingClientRect();
@@ -191,10 +202,13 @@ function loop(now) {
   if (onFrame && onFrame(now)) dirty = true;
   const moved = controls.update();
   adapt(now, dirty || moved);
-  if (dirty || moved) {
+  if ((dirty || moved) && !hidden) {
     const dist = camera.position.distanceTo(controls.target);
     common.fogNear.value = scene.fog.near = dist * 1.1; common.fogFar.value = scene.fog.far = dist * 2.9;
+    const risen = common.rise.value > 0.999;
+    for (const o of netObjs) o.visible = risen && !!layers.network?.visible && dist < o.userData.maxDist; // rivers appear once the relief has risen
     renderer.render(scene, camera); dirty = false;
+    drawLabels(dist);
     if (terrain && !firstFrame) { firstFrame = true; performance.mark('map-ready'); }
     const sc = Math.max(0.35, dist / 260); // pins and fronts keep roughly the same size on screen
     if (marker) marker.scale.setScalar(sc); if (fronts) fronts.forEach((f) => f.scale.setScalar(sc));
@@ -242,7 +256,86 @@ export function setPoints(name, items, colorOf, sizeOf = () => 9) {
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(p, 3)); g.setAttribute('color', new THREE.BufferAttribute(c, 3)); g.setAttribute('size', new THREE.BufferAttribute(s, 1));
   const obj = new THREE.Points(g, new THREE.ShaderMaterial({ uniforms: ptUni, vertexShader: ptVert, fragmentShader: ptFrag, transparent: true, depthTest: true }));
-  obj.renderOrder = 2; scene.add(obj); layers[name] = { obj, items, visible: true }; dirty = true;
+  obj.renderOrder = 2; scene.add(obj); layers[name] = { obj, items, pos: p, visible: true }; dirty = true;
+}
+
+// ---- river network: screen-space lines (main rivers thicker), pickable by their cells ----
+// polys: [{ pts: [[lon, lat], …], km2 }]; picking reports { poly, i, ll }.
+export function setRiverNetwork(polys) {
+  for (const o of netObjs) { scene.remove(o); o.geometry.dispose(); }
+  netObjs.length = 0;
+  const pick = [], items = [];
+  // tributaries (< 1000 km²) only when zoomed in: at the national view they are sub-pixel clutter
+  for (const [minKm2, maxKm2, width, color, maxDist] of [[250, 1000, 1.2, 0x3b8aa3, 520], [1000, 5000, 1.6, 0x2f7f9a, Infinity], [5000, Infinity, 2.6, 0x0a6787, Infinity]]) {
+    const seg = [];
+    polys.forEach((pl, pi) => {
+      if (pl.km2 < minKm2 || pl.km2 >= maxKm2) return;
+      const xyz = pl.pts.map((ll) => { const [x, z] = toXZ(...ll); return [x, heightAt(...ll) + 0.45, z]; });
+      for (let k = 1; k < xyz.length; k++) seg.push(...xyz[k - 1], ...xyz[k]);
+      xyz.forEach((v, i) => { pick.push(...v); items.push({ poly: pi, i, ll: pl.pts[i] }); });
+    });
+    const g = new LineSegmentsGeometry(); g.setPositions(seg);
+    const m = new LineMaterial({ color, linewidth: width, transparent: true, opacity: 0.95, depthTest: true });
+    m.resolution.set(host.clientWidth || 1, host.clientHeight || 1); lineMats.push(m);
+    const o = new LineSegments2(g, m); o.renderOrder = 1; o.visible = false; o.userData.maxDist = maxDist; scene.add(o); netObjs.push(o);
+  }
+  layers.network = { obj: netObjs[0], items, pos: new Float32Array(pick), visible: layers.network?.visible ?? true };
+  dirty = true;
+}
+
+// ---- traced river: thick line on a white halo, revealed downstream (setTraceProgress 0..1) ----
+let trace = null;
+export function setTrace(pts) {
+  clearTrace(); if (!scene || pts.length < 2) return;
+  const seg = []; let prev = null;
+  for (const ll of pts) { const [x, z] = toXZ(...ll), v = [x, heightAt(...ll) + 0.7, z]; if (prev) seg.push(...prev, ...v); prev = v; }
+  trace = [[9, 0xf7f9f7, 0.9], [4.5, 0x05475f, 1]].map(([w, c, o], k) => {
+    const g = new LineSegmentsGeometry(); g.setPositions(seg);
+    const m = new LineMaterial({ color: c, linewidth: w, transparent: true, opacity: o, depthTest: false });
+    m.resolution.set(host.clientWidth || 1, host.clientHeight || 1); lineMats.push(m);
+    const o2 = new LineSegments2(g, m); o2.renderOrder = 6 + k; scene.add(o2); return o2;
+  });
+  trace.n = seg.length / 6; setTraceProgress(0);
+}
+export function setTraceProgress(f) { if (!trace) return; const n = Math.max(1, Math.round(trace.n * f)); for (const o of trace) o.geometry.instanceCount = n; dirty = true; }
+export function clearTrace() { if (!trace) return; for (const o of trace) { scene.remove(o); o.geometry.dispose(); lineMats.splice(lineMats.indexOf(o.material), 1); o.material.dispose(); } trace = null; dirty = true; }
+
+// ---- place-name labels: ranked, shown by zoom, no overlaps (2D canvas over the WebGL view) ----
+// items: [{ ll, text, rank, pri }]  rank 0 = always shown … 4 = only when close; pri breaks ties (the capital first)
+const LABEL_MAX_DIST = [Infinity, 1400, 700, 330, 170];
+export function setLabels(items) {
+  labels = items.map((l) => { const [x, z] = toXZ(...l.ll); return { ...l, x, y: heightAt(...l.ll), z }; }).sort((a, b) => a.rank - b.rank || (b.pri || 0) - (a.pri || 0));
+  labelW.clear(); labelKey = ''; dirty = true;
+}
+const lv = new THREE.Vector3();
+function drawLabels(dist) {
+  // redraw only when the view, the labels or the relief changed (not on every animation frame)
+  const e = camera.matrixWorld.elements, key = `${e[12].toFixed(2)},${e[13].toFixed(2)},${e[14].toFixed(2)},${e[8].toFixed(4)},${e[10].toFixed(4)},${common.rise.value.toFixed(3)},${labels.length}`;
+  if (key === labelKey) return; labelKey = key;
+  const W = labelCanvas.width, H = labelCanvas.height, s = devicePixelRatio;
+  lctx.setTransform(1, 0, 0, 1, 0, 0); lctx.clearRect(0, 0, W, H);
+  if (!labels.length || common.rise.value < 0.999 || !host.clientWidth) { if (labelCanvas.dataset.drawn) labelCanvas.dataset.drawn = ''; return; }
+  lctx.setTransform(s, 0, 0, s, 0, 0);
+  const w = host.clientWidth - inset, h = host.clientHeight, boxes = [], drawn = [];
+  lctx.textBaseline = 'middle'; lctx.lineJoin = 'round';
+  for (const l of labels) {
+    if (dist > LABEL_MAX_DIST[l.rank] || drawn.length >= 90) continue;
+    lv.set(l.x, l.y, l.z).project(camera);
+    if (lv.z > 1) continue;
+    const px = ((lv.x + 1) / 2) * host.clientWidth, py = ((1 - lv.y) / 2) * h;
+    if (px < 0 || py < 0 || px > w || py > h) continue;
+    const font = l.rank === 0 ? '650 15px Anek, "Noto Sans Devanagari", system-ui, sans-serif' : l.rank === 1 ? '600 13.5px Anek, "Noto Sans Devanagari", system-ui, sans-serif' : l.rank === 2 ? '500 12.5px Anek, "Noto Sans Devanagari", system-ui, sans-serif' : '500 12px Anek, "Noto Sans Devanagari", system-ui, sans-serif';
+    lctx.font = font;
+    const key = font + l.text; let tw = labelW.get(key); if (tw == null) { tw = lctx.measureText(l.text).width; labelW.set(key, tw); }
+    const dot = l.rank !== 2, bx = px + (dot ? 6 : -tw / 2), by = py - 9, bw = tw + (dot ? 2 : 0), bh = 18;
+    if (boxes.some((b) => bx < b[0] + b[2] + 4 && bx + bw + 4 > b[0] && by < b[1] + b[3] && by + bh > b[1])) continue;
+    boxes.push([bx, by, bw, bh]); drawn.push(l.text);
+    lctx.lineWidth = 3.2; lctx.strokeStyle = 'rgba(247,249,247,.92)'; lctx.fillStyle = l.rank === 2 ? '#6b6556' : '#1b2a32';
+    if (dot) { lctx.beginPath(); lctx.arc(px, py, l.rank === 0 ? 3.2 : 2.5, 0, 7); lctx.fill(); lctx.lineWidth = 1.5; lctx.stroke(); lctx.lineWidth = 3.2; }
+    const tx = dot ? px + 7 : px - tw / 2;
+    lctx.strokeText(l.text, tx, py); lctx.fillText(l.text, tx, py);
+  }
+  const d = drawn.join('|'); if (labelCanvas.dataset.drawn !== d) labelCanvas.dataset.drawn = d;
 }
 export function showLayer(name, on) { if (layers[name]) { layers[name].obj.visible = on; layers[name].visible = on; dirty = true; } }
 
@@ -256,7 +349,7 @@ function pickHandlers(el) {
     let best = null, bd = 22;
     for (const [name, L] of Object.entries(layers)) {
       if (!L.visible) continue;
-      const a = L.obj.geometry.attributes.position.array;
+      const a = L.pos;
       for (let k = 0; k < L.items.length; k++) {
         v.set(a[3 * k], a[3 * k + 1], a[3 * k + 2]).project(camera);
         if (v.z > 1) continue;

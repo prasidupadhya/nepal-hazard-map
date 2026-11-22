@@ -63,6 +63,14 @@ main { position: relative; height: calc(100dvh - var(--hdr)); }
 .key .sw { width: 12px; height: 12px; border-radius: 50%; box-shadow: 0 0 0 2px #fff, 0 0 0 3px var(--ink); flex: none; transition: transform .2s, opacity .2s; }
 .key button[aria-pressed="false"] { color: var(--silt); }
 .key button[aria-pressed="false"] .sw { opacity: .25; transform: scale(.7); }
+.key .sw.line { width: 16px; height: 3px; border-radius: 2px; background: var(--melt); box-shadow: none; }
+.linkish { border: 0; background: none; padding: 0; color: var(--melt); text-decoration: underline; text-underline-offset: .18em; cursor: pointer; text-align: left; }
+.hint { color: var(--amber-ink); font-weight: 560; }
+.hint.flash { animation: hint .6s ease-out; }
+@keyframes hint { from { background: rgba(185, 120, 0, .18); } }
+.lakefacts dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 14px; margin: 4px 0 8px; font-size: 14.5px; }
+.lakefacts dt { color: var(--silt); } .lakefacts dd { margin: 0; }
+.callout .list { margin-bottom: 8px; }
 .instruments { display: flex; align-items: flex-end; gap: 12px; }
 .scale { display: grid; gap: 2px; font-size: 13px; color: var(--ink); background: rgba(247, 249, 247, .88); padding: 5px 8px 3px; border-radius: 6px; }
 .scale i { display: block; height: 6px; width: 80px; border: 1.5px solid var(--ink); border-top: 0; transition: width .25s; }
@@ -203,3 +211,4 @@ td.n { white-space: nowrap; font-stretch: 88%; }
   .mmi i { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
+#gl canvas.labels { pointer-events: none; }

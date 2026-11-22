@@ -94,7 +94,14 @@ try {
     dId[b.id] = en;
     places.push({ t: 'd', en, ne, ll: b.centroid.coordinates.map((v) => +v.toFixed(4)), p: p.no });
   }
-  for (const x of m) if (x.centroid) places.push({ t: 'm', en: x.title_en, ne: x.title_ne, ll: x.centroid.coordinates.map((v) => +v.toFixed(4)), dn: dId[x.district] || '' });
+  // The 753 local levels (k: 1 metropolitan, 2 sub-metropolitan, 3 municipality, 4 rural municipality, used to rank
+  // map labels). BIPAD's list also holds parts of national parks and reserves (split per district, some
+  // missing): they are not local levels and are left out.
+  const KIND = { 'Metropolitan City': 1, 'Submetropolitan City': 2, 'Sub-Metropolitan City': 2, Municipality: 3, 'Rural Municipality': 4 };
+  for (const x of m) if (x.centroid) {
+    const ll = x.centroid.coordinates.map((v) => +v.toFixed(4)), dn = dId[x.district] || '';
+    if (KIND[x.type]) places.push({ t: 'm', en: x.title_en, ne: x.title_ne, ll, dn, k: KIND[x.type] });
+  }
   for (const l of LAKES) places.push({ t: 'l', en: l.en, ne: l.ne, ll: l.ll, id: l.id });
   for (const r of latest.rivers) places.push({ t: 's', en: r.name, ne: r.name, ll: r.ll, id: r.id });
   write('places.json', places);
