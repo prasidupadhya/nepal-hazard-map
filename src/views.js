@@ -1,7 +1,7 @@
 import { t, num, when, age, name, lang, digits } from './i18n.js';
 import { freshness } from './age.js';
-import * as map from './map3d.js';
-import { MMI_COLORS } from './map3d.js';
+import { map } from './map.js';
+import { MMI_COLORS } from './colors.js';
 import { state, dataReady, mapReady, mapMsg, showChips, riverColor, searchPlaces } from './main.js';
 import { LAKES } from './lakes.js';
 import { PROVINCES } from './districts.js';

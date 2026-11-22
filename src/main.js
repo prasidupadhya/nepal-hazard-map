@@ -1,5 +1,5 @@
 import { T, t, setLang, lang, name } from './i18n.js';
-import * as map from './map3d.js';
+import { map, mapModule } from './map.js';
 import { VIEWS } from './views.js';
 
 export const state = { latest: null, places: [], layers: { rivers: true, rain: false, quakes: true, incidents: true }, view: null, pickHandler: null };
@@ -105,7 +105,7 @@ export function drawLayers() {
 applyText();
 const dataP = Promise.all([fetch('data/latest.json').then((r) => r.json()), fetch('data/places.json').then((r) => r.json())])
   .then(([l, p]) => { state.latest = l; state.places = p; });
-const mapP = map.init(document.getElementById('gl'), { onPick: (x) => state.view?.onPick?.(x), onFrame: (now) => state.view?.onFrame?.(now) });
+const mapP = mapModule.then((m) => m.init(document.getElementById('gl'), { onPick: (x) => state.view?.onPick?.(x), onFrame: (now) => state.view?.onFrame?.(now) }));
 export const dataReady = dataP;
 export const mapReady = mapP;
 export const ready = Promise.all([dataP, mapP]).then(() => { drawLayers(); });

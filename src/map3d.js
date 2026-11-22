@@ -2,9 +2,8 @@
 import * as THREE from 'three';
 import { MapControls } from 'three/examples/jsm/controls/MapControls.js';
 import { BOX, VIEW, kmPerDegLon, KM_PER_DEG_LAT } from './grid.js';
+import { MMI_COLORS } from './colors.js';
 
-// USGS ShakeMap intensity colours, index = MMI (0 unused)
-export const MMI_COLORS = ['#ffffff', '#ffffff', '#bfccff', '#a0e6ff', '#80ffff', '#7aff93', '#ffff00', '#ffc800', '#ff9100', '#ff0000', '#c80000'];
 const C = { lon: (BOX.w + BOX.e) / 2, lat: (BOX.s + BOX.n) / 2 };
 const KX = kmPerDegLon(C.lat), EXAG = 2.5;
 export const toXZ = (lon, lat) => [(lon - C.lon) * KX, (C.lat - lat) * KM_PER_DEG_LAT];
