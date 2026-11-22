@@ -137,5 +137,7 @@ const d = 'M' + ring.map(([lo, la]) => `${((lo - BOX.w) / sx).toFixed(1)},${((BO
 const mask = await sharp(Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${TXW}" height="${TXH}"><rect width="100%" height="100%" fill="#000"/><path d="${d}" fill="#fff"/></svg>`)).greyscale().raw().toBuffer();
 for (let k = 0; k < TXW * TXH; k++) if (mask[k] < 128) { const g = (tex[3 * k] + tex[3 * k + 1] + tex[3 * k + 2]) / 3; for (let q = 0; q < 3; q++) tex[3 * k + q] = (g * 0.7 + tex[3 * k + q] * 0.3) * 0.55; }
 const border = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${TXW}" height="${TXH}"><path d="${d}" fill="none" stroke="#fff" stroke-opacity=".85" stroke-width="2.2"/></svg>`);
-await sharp(tex, { raw: { width: TXW, height: TXH, channels: 3 } }).composite([{ input: border }]).jpeg({ quality: 82, mozjpeg: true }).toFile(OUT + 'texture.jpg');
+const full = await sharp(tex, { raw: { width: TXW, height: TXH, channels: 3 } }).composite([{ input: border }]).png().toBuffer();
+await sharp(full).jpeg({ quality: 82, mozjpeg: true }).toFile(OUT + 'texture.jpg');              // sharp, loaded when idle
+await sharp(full).resize(1024).jpeg({ quality: 80, mozjpeg: true }).toFile(OUT + 'texture-1024.jpg'); // first paint
 console.log('ok', { tilesPx: [TW, TH], route: [nx, ny], view: [VIEW.nx, VIEW.ny], tex: [TXW, TXH], maxAcc: acc.reduce((m, x) => Math.max(m, x), 0) });

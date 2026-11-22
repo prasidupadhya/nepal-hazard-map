@@ -67,7 +67,7 @@ export async function init(el, { onPick: pick, onFrame: frame } = {}) {
   controls.addEventListener('change', () => (dirty = true));
   new ResizeObserver(resize).observe(el); resize();
 
-  const [h, tex] = await Promise.all([pixels('terrain/height.png'), new THREE.TextureLoader().loadAsync('terrain/texture.jpg')]);
+  const [h, tex] = await Promise.all([pixels('terrain/height.png'), new THREE.TextureLoader().loadAsync('terrain/texture-1024.jpg')]);
   heights = new Float32Array(VIEW.nx * VIEW.ny);
   for (let k = 0; k < heights.length; k++) heights[k] = h[4 * k] * 256 + h[4 * k + 1];
   tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
@@ -89,6 +89,10 @@ export async function init(el, { onPick: pick, onFrame: frame } = {}) {
   scene.add(terrain);
   pickHandlers(renderer.domElement);
   loop();
+  // swap in the sharp texture once the page is idle (not on Data Saver)
+  if (!navigator.connection?.saveData) (window.requestIdleCallback || setTimeout)(() => new THREE.TextureLoader().loadAsync('terrain/texture.jpg').then((hi) => {
+    hi.colorSpace = THREE.SRGBColorSpace; hi.anisotropy = tex.anisotropy; const old = uni.map.value; uni.map.value = hi; old.dispose(); dirty = true;
+  }).catch(() => {}), { timeout: 4000 });
 }
 
 function resize() {

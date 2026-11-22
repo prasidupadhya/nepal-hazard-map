@@ -1,0 +1,61 @@
+{
+ "label": "05-texture-progressive",
+ "runs": 5,
+ "startup": {
+  "fcp": 424,
+  "content": 762,
+  "map": 2999,
+  "tbt": 185,
+  "kb": 435,
+  "jsKb": 141
+ },
+ "screens": {
+  "data": 232,
+  "glof": 27,
+  "quake": 218,
+  "about": 8,
+  "map": 7
+ },
+ "content": {
+  "GLOF result (cold route grid)": 1616,
+  "quake first shaking": 57,
+  "quake slider step": 285,
+  "data list open (rain)": 13,
+  "data list open (incidents)": 177,
+  "load older #1": 225,
+  "rows after older #1": 238,
+  "load older #2": 254,
+  "rows after older #2": 258,
+  "load older #3": 247,
+  "rows after older #3": 282
+ },
+ "scroll": {
+  "rain": {
+   "p50": 16.7,
+   "p95": 16.7,
+   "jank": 0
+  },
+  "incidents": {
+   "p50": 16.7,
+   "p95": 16.8,
+   "jank": 0
+  }
+ },
+ "frames": {
+  "map drag": {
+   "p50": 216.6,
+   "p95": 233.4,
+   "jank": 80
+  },
+  "GLOF animation": {
+   "p50": 183.4,
+   "p95": 216.6,
+   "jank": 93.3
+  },
+  "quake animation": {
+   "p50": 183.3,
+   "p95": 249.9,
+   "jank": 93.3
+  }
+ }
+}
