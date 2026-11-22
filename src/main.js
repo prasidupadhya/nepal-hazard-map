@@ -2,12 +2,12 @@ import { T, t, setLang, lang, name } from './i18n.js';
 import { map, mapModule } from './map.js';
 import { VIEWS } from './views.js';
 
-export const state = { latest: null, places: [], layers: { rivers: true, rain: false, quakes: true, incidents: true }, view: null, pickHandler: null };
+export const state = { latest: null, places: [], layers: { rivers: true, rain: false, quakes: true, incidents: true }, view: null };
 const $ = (s) => document.querySelector(s);
 export const panel = $('#panel');
 
 const LAYER_COLOR = { rivers: '#38bdf8', rain: '#a78bfa', quakes: '#f97316', incidents: '#f43f5e' };
-export const riverColor = (r) => (r.status === 'DANGER LEVEL' ? '#ef4444' : r.status === 'WARNING LEVEL' ? '#f59e0b' : '#38bdf8');
+const riverColor = (r) => (r.status === 'DANGER LEVEL' ? '#ef4444' : r.status === 'WARNING LEVEL' ? '#f59e0b' : '#38bdf8');
 
 // ---------- language ----------
 const saved = (() => { try { return localStorage.getItem('lang'); } catch { return null; } })();
@@ -37,11 +37,10 @@ export function showChips(on) { $('#chips').hidden = !on; for (const k in state.
 // ---------- search ----------
 const norm = (s) => s.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '');
 let hits = [], sel = -1;
-export function searchPlaces(q, kinds) {
+function searchPlaces(q) {
   q = norm(q.trim()); if (!q) return [];
   const rank = { d: 0, l: 1, m: 2, s: 3 }, out = [];
   for (const p of state.places) {
-    if (kinds && !kinds.includes(p.t)) continue;
     const a = (p._en ??= norm(p.en)), b = (p._ne ??= norm(p.ne));
     const s = a.startsWith(q) || b.startsWith(q) ? 0 : a.includes(' ' + q) || b.includes(' ' + q) ? 1 : a.includes(q) || b.includes(q) ? 2 : -1;
     if (s >= 0) out.push([s * 10 + rank[p.t], p]);
@@ -69,9 +68,6 @@ function choose(p) {
   map.flyTo(...p.ll, p.t === 'd' ? 140 : 60); map.setMarker(p.ll, '#60a5fa');
   state.view?.onPlace?.(p);
 }
-
-// ---------- map messages ----------
-let msgT; export function mapMsg(s, ms = 2500) { const m = $('#mapmsg'); m.textContent = s; m.classList.add('on'); clearTimeout(msgT); msgT = setTimeout(() => m.classList.remove('on'), ms); }
 
 // ---------- router ----------
 function markNav() {

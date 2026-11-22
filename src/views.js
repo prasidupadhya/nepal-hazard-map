@@ -2,7 +2,7 @@ import { t, num, when, age, name, lang, digits } from './i18n.js';
 import { freshness } from './age.js';
 import { map } from './map.js';
 import { MMI_COLORS } from './colors.js';
-import { state, dataReady, mapReady, mapMsg, showChips, riverColor, searchPlaces } from './main.js';
+import { state, dataReady, mapReady, showChips } from './main.js';
 import { LAKES } from './lakes.js';
 import { PROVINCES } from './districts.js';
 import { VIEW } from './grid.js';
