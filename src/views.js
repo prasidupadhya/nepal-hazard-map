@@ -2,7 +2,7 @@ import { t, num, when, age, name, lang, digits } from './i18n.js';
 import { freshness } from './age.js';
 import * as map from './map3d.js';
 import { MMI_COLORS } from './map3d.js';
-import { state, ready, mapMsg, showChips, riverColor, searchPlaces } from './main.js';
+import { state, dataReady, mapReady, mapMsg, showChips, riverColor, searchPlaces } from './main.js';
 import { LAKES } from './lakes.js';
 import { PROVINCES } from './districts.js';
 import { VIEW } from './grid.js';
@@ -64,7 +64,7 @@ async function routeFor(ll) {
 const mapView = {
   async enter(el, live) {
     el.innerHTML = `<h1>${t('title')}</h1><p class="lead">${t('loading')}</p>`;
-    await ready; if (!live()) return;
+    await dataReady; if (!live()) return;
     showChips(true); map.clearPath(); map.clearShaking();
     const L = state.latest, high = L.rivers.filter((r) => r.status && r.status !== 'BELOW WARNING LEVEL');
     el.innerHTML = `<h1>${t('title')}</h1>
@@ -95,7 +95,7 @@ const dataView = {
   full: true,
   async enter(el, live) {
     el.innerHTML = `<h1>${t('nav.data')}</h1><p class="lead">${t('loading')}</p>`;
-    await ready; if (!live()) return;
+    await dataReady; if (!live()) return;
     const tab = location.hash.split('/')[2] || 'rivers';
     el.innerHTML = `<h1>${t('nav.data')}</h1>${printBlock('')}<h2>${t('sources')}</h2>${feedCards()}
       <div class="tabs" role="tablist">${['rivers', 'rain', 'quakes', 'incidents'].map((k) => `<button role="tab" aria-selected="${k === tab}" data-k="${k}">${t('feeds.' + k)}</button>`).join('')}</div>
@@ -158,10 +158,12 @@ const glofView = {
     el.querySelector('#run').onclick = () => {
       const a = Math.max(0.1, +v0.value || 0), b = Math.max(a, +v1.value || 0); G.vol = [a, b]; v0.value = a; v1.value = b; run(el, live);
     };
-    await ready; if (!live()) return;
+    routeFor(G.lake.ll);
+    await dataReady; if (!live()) return;
+    if (G.res) showResult(el);
+    await mapReady; if (!live()) return;
     map.setMarker(G.lake.ll, '#e879f9');
-    if (G.res) { map.setPath(G.res); showResult(el); map.setPathTime(G.t); } else map.flyTo(...G.lake.ll, 90);
-    routeFor(G.lake.ll); // start loading this lake's tiles while the user reads
+    if (G.res) { map.setPath(G.res); map.setPathTime(G.t); } else map.flyTo(...G.lake.ll, 90); // start loading this lake's tiles while the user reads
   },
   onPick({ ground, item }) {
     const ll = ground || item?.ll; if (!ll) return;
@@ -183,12 +185,11 @@ const glofView = {
 };
 async function run(el, live) {
   const out = el.querySelector('#out'); out.innerHTML = `<p class="note">${t('loading')}</p>`;
-  const r = await routeFor(G.lake.ll), w = await engine(); if (!live()) return;
+  const r = await routeFor(G.lake.ll), w = await engine(); await dataReady; if (!live()) return;
   G.res = w ? w.glof(...G.lake.ll, G.vol) : js.glof(js.tracePath(r, ...G.lake.ll), G.vol);
   G.t = 0; G.playing = true; G.last = 0;
-  map.setPath(G.res); map.setPathTime(0);
-  const mid = G.res[Math.floor(G.res.length / 2)]; map.flyTo(...mid.ll, Math.min(420, 60 + G.res.at(-1).km * 0.9));
   showResult(el);
+  mapReady.then(() => { if (!live()) return; map.setPath(G.res); map.setPathTime(0); const mid = G.res[Math.floor(G.res.length / 2)]; map.flyTo(...mid.ll, Math.min(420, 60 + G.res.at(-1).km * 0.9)); });
   performance.mark('glof-result');
 }
 function placesAlong(res) {
@@ -244,9 +245,9 @@ const quakeView = {
     M.oninput = () => { Q.M = +M.value; update(false); };
     S.onchange = () => { Q.strike = ((+S.value % 360) + 360) % 360; update(false); };
     el.querySelector('#go').onclick = () => update(true);
-    await ready; if (!live()) return;
-    legend(); map.flyTo(...Q.ll, 420);
-    await engine(); if (!live()) return;
+    legend();
+    mapReady.then(() => live() && map.flyTo(...Q.ll, 420));
+    await Promise.all([engine(), dataReady]); if (!live()) return;
     update(true);
   },
   onPick({ ground, item }) { const ll = ground || item?.ll; if (!ll) return; Q.ll = ll; Q.label = null; update(true); },
@@ -268,9 +269,11 @@ async function update(animate) {
     const q = { M: Q.M, ll: Q.ll, strike: Q.strike }, grid = w ? w.shakingGrid(q, VIEW) : js.shakingGrid(q, VIEW);
     const half = js.ruptureKm(Q.M) / 2, th = (Q.strike * Math.PI) / 180, kx = 111.32 * Math.cos((Q.ll[1] * Math.PI) / 180);
     const a = [Q.ll[0] - (Math.sin(th) * half) / kx, Q.ll[1] - (Math.cos(th) * half) / 111.32], b = [Q.ll[0] + (Math.sin(th) * half) / kx, Q.ll[1] + (Math.cos(th) * half) / 111.32];
-    map.setShaking(grid, a, b); map.setMarker(Q.ll, '#ff3b30');
-    if (animate) { Q.r = 0; Q.last = 0; Q.animating = true; } else map.setShakeRadius((Q.r = 800));
     renderQuakeTable();
+    mapReady.then(() => {
+      map.setShaking(grid, a, b); map.setMarker(Q.ll, '#ff3b30');
+      if (animate) { Q.r = 0; Q.last = 0; Q.animating = true; } else map.setShakeRadius((Q.r = 800));
+    });
     performance.mark('quake-shaking');
   });
 }
@@ -293,7 +296,7 @@ function renderQuakeTable() {
 const aboutView = {
   full: true,
   async enter(el, live) {
-    await ready; if (!live()) return;
+    await dataReady; if (!live()) return;
     const S = state.latest.sources, ne = lang === 'ne';
     el.innerHTML = `<h1>${t('about')}</h1>
     <div class="card"><b>${t('disclaimer')}</b></div>

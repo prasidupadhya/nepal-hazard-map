@@ -212,6 +212,7 @@ export function clearPath() { if (pathObj) { scene.remove(pathObj); pathObj.geom
 
 // single highlighted location (search result / epicentre / lake)
 export function setMarker(ll, color = '#ff3b30') {
+  if (!scene) return;
   if (!marker) {
     marker = new THREE.Group();
     const pin = new THREE.Mesh(new THREE.ConeGeometry(2.2, 9, 12), new THREE.MeshBasicMaterial({ color }));
