@@ -115,20 +115,20 @@ const dataView = {
     filter.oninput = draw; draw();
     if (tab === 'quakes' || tab === 'incidents') {
       const more = el.querySelector('#more');
-      archiveMonths ??= fetch('data/archive/index.json').then((r) => r.json()).then((j) => Object.keys(j.months).sort().reverse());
+      archiveMonths ??= fetch('data/archive/index.json').then((r) => r.json()).then((j) => Object.entries(j.months).sort((a, b) => (a[0] < b[0] ? 1 : -1)));
       const months = await archiveMonths; if (!live()) return;
-      let oldest = all.length ? all.at(-1).at.slice(0, 7) : '9999', mi = months.findIndex((m) => m < oldest);
+      const oldest = all.length ? all.at(-1).at.slice(0, 7) : '9999';
+      let mi = months.findIndex(([m]) => m < oldest);
       const btn = () => { more.innerHTML = mi >= 0 && mi < months.length ? `<button class="btn ghost" type="button">${t('loadOlder')}</button>` : `<span class="note">${t('noOlder')}</span>`; };
       more.onclick = async (e) => {
         if (!e.target.closest('button')) return;
         more.innerHTML = `<span class="note">${t('loading')}</span>`;
-        // load one month at a time until we have at least 20 more rows (or run out)
-        let added = 0;
-        while (mi >= 0 && mi < months.length && added < 20) {
-          const m = await (await fetch(`data/archive/${months[mi++]}.json`)).json();
-          const have = new Set(all.map((x) => x.id)), add = m[tab].filter((x) => !have.has(x.id));
-          all = all.concat(add); added += add.length;
-        }
+        // the index knows each month's row count: pick enough months for 20+ rows, fetch them in parallel
+        const pick = []; let n = 0;
+        while (mi >= 0 && mi < months.length && n < 20) { if (months[mi][1][tab] > 0) { pick.push(months[mi][0]); n += months[mi][1][tab]; } mi++; }
+        const got = await Promise.all(pick.map((m) => fetch(`data/archive/${m}.json`).then((r) => r.json())));
+        const have = new Set(all.map((x) => x.id));
+        for (const g of got) all = all.concat(g[tab].filter((x) => !have.has(x.id)));
         draw(); btn();
       };
       btn();
