@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Nepal Hazard Map</title>
+<meta name="description" content="Floods, glacial lake outbursts and earthquakes in Nepal: daily copies of official data (DHM, BIPAD, NEMRC) on a 3D map, with what-if scenarios. Not an official warning.">
+<meta name="theme-color" content="#0d1620">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M2 26 12 8l6 10 4-6 8 14z' fill='%2360a5fa'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+<a class="skip" href="#panel">Skip to content</a>
+<header class="top">
+  <a class="brand" href="#/"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M2 26 12 8l6 10 4-6 8 14z" fill="currentColor"/></svg><span data-t="short"></span></a>
+  <nav id="nav" aria-label="Main"></nav>
+  <button id="lang" class="lang" type="button"></button>
+</header>
+<p class="disclaimer" role="note"><strong>!</strong> <span data-t="disclaimer"></span></p>
+<main id="main">
+  <section id="stage" aria-label="3D map">
+    <div id="gl"></div>
+    <div class="search" role="search">
+      <input id="q" type="search" autocomplete="off" spellcheck="false" aria-controls="results" aria-expanded="false">
+      <ul id="results" role="listbox" hidden></ul>
+    </div>
+    <div id="chips" class="chips"></div>
+    <div id="legend" class="legend" hidden></div>
+    <div id="mapmsg" class="mapmsg" role="status" aria-live="polite"></div>
+  </section>
+  <section id="panel" tabindex="-1"></section>
+</main>
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>

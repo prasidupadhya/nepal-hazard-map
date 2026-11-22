@@ -1,0 +1,16 @@
+import { createRequire } from 'node:module';
+const { chromium } = createRequire(import.meta.url)(process.env.PW);
+const OUT = process.argv[2], BASE = 'http://localhost:4173/';
+const b = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+const p = await b.newPage({ viewport: { width: 1280, height: 800 } });
+await p.goto(BASE + '#/glof'); await p.waitForSelector('#run'); await p.waitForTimeout(800);
+await p.selectOption('#lake', 'imja'); await p.click('#run'); await p.waitForSelector('#out tbody tr', { timeout: 30000 });
+await p.waitForTimeout(2600); await p.click('#play'); await p.waitForTimeout(200);
+await p.$eval('#tslider', (s) => { s.value = s.max * 0.45; s.dispatchEvent(new Event('input')); }); await p.waitForTimeout(500);
+await p.screenshot({ path: OUT + '/glof-desktop.png' });
+const m = await b.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
+await m.goto(BASE + '#/'); await m.waitForSelector('#panel .feeds'); await m.waitForTimeout(2500);
+await m.screenshot({ path: OUT + '/phone-map.png' });
+await m.goto(BASE + '#/quake'); await m.waitForSelector('#out tbody tr'); await m.waitForTimeout(4500);
+await m.screenshot({ path: OUT + '/phone-quake.png' });
+await b.close();
