@@ -1,4 +1,4 @@
-import { T, t, setLang, lang, name } from './i18n.js';
+import { T, t, setLang, lang, name, num } from './i18n.js';
 import { map, mapModule } from './map.js';
 import { VIEWS } from './views.js';
 
@@ -6,8 +6,9 @@ export const state = { latest: null, places: [], layers: { rivers: true, rain: f
 const $ = (s) => document.querySelector(s);
 export const panel = $('#panel');
 
-const LAYER_COLOR = { rivers: '#38bdf8', rain: '#a78bfa', quakes: '#f97316', incidents: '#f43f5e' };
-const riverColor = (r) => (r.status === 'DANGER LEVEL' ? '#ef4444' : r.status === 'WARNING LEVEL' ? '#f59e0b' : '#38bdf8');
+// map inks: hazard levels use amber/red only; everything else is a quiet ink
+export const LAYER_COLOR = { rivers: '#0A6787', rain: '#5B5FA6', quakes: '#6B4E2E', incidents: '#9C3D7A' };
+const riverColor = (r) => (r.status === 'DANGER LEVEL' ? '#B8322A' : r.status === 'WARNING LEVEL' ? '#B97800' : LAYER_COLOR.rivers);
 
 // ---------- language ----------
 const saved = (() => { try { return localStorage.getItem('lang'); } catch { return null; } })();
@@ -26,13 +27,28 @@ $('#lang').onclick = () => { setLang(lang === 'en' ? 'ne' : 'en'); try { localSt
 
 // ---------- layer chips ----------
 function chips() {
-  $('#chips').innerHTML = Object.keys(state.layers).map((k) => `<button class="chip" type="button" data-l="${k}" aria-pressed="${state.layers[k]}"><span class="dot" style="background:${LAYER_COLOR[k]}"></span>${t('layers.' + k)}</button>`).join('');
+  $('#chips').setAttribute('aria-label', t('key'));
+  $('#chips').innerHTML = Object.keys(state.layers).map((k) => `<button type="button" data-l="${k}" aria-pressed="${state.layers[k]}"><span class="sw" style="background:${LAYER_COLOR[k]}"></span>${t('layers.' + k)}</button>`).join('');
+  $('#northbtn').setAttribute('aria-label', t('north')); $('#northbtn').title = t('north');
 }
 $('#chips').onclick = (e) => {
   const b = e.target.closest('[data-l]'); if (!b) return;
   const k = b.dataset.l; state.layers[k] = !state.layers[k]; b.setAttribute('aria-pressed', state.layers[k]); map.showLayer(k, state.layers[k]);
 };
 export function showChips(on) { $('#chips').hidden = !on; for (const k in state.layers) map.showLayer(k, on && state.layers[k]); }
+
+// ---------- scale bar + north arrow ----------
+const NICE = [1, 2, 5, 10, 20, 50, 100, 200, 500];
+function onView({ kmPerPx, azimuth }) {
+  const km = NICE.filter((n) => n / kmPerPx <= 110).pop() || 1, label = `${num(km)} ${t('km')}`;
+  $('#scalebar').style.width = (km / kmPerPx).toFixed(1) + 'px';
+  if ($('#scalelabel').textContent !== label) $('#scalelabel').textContent = label;
+  $('#northbtn svg').style.transform = `rotate(${azimuth.toFixed(3)}rad)`;
+}
+$('#northbtn').onclick = () => map.resetNorth();
+
+// header height drives the layout (the disclaimer wraps differently per language)
+new ResizeObserver(([e]) => document.documentElement.style.setProperty('--hdr', e.target.offsetHeight + 'px')).observe($('.top'));
 
 // ---------- search ----------
 const norm = (s) => s.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '');
@@ -49,7 +65,7 @@ function searchPlaces(q) {
 }
 function renderHits() {
   const ul = $('#results');
-  ul.innerHTML = hits.length ? hits.map((p, i) => `<li role="option" id="h${i}" aria-selected="${i === sel}" data-i="${i}"><span>${name(p)}</span><small>${t('kinds.' + p.t)}${p.dn ? ' · ' + name(state.places.find((d) => d.t === 'd' && d.en === p.dn) || { en: p.dn }) : ''}</small></li>`).join('') : `<li aria-disabled="true">${t('noResults')}</li>`;
+  ul.innerHTML = hits.length ? hits.map((p, i) => `<li role="option" id="h${i}" aria-selected="${i === sel}" data-i="${i}"><span>${name(p)}</span><small>${p.dn ? name(state.places.find((d) => d.t === 'd' && d.en === p.dn) || { en: p.dn }) + ', ' : ''}${t('kinds.' + p.t).toLowerCase()}</small></li>`).join('') : `<li aria-disabled="true">${t('noResults')}</li>`;
   ul.hidden = false; $('#q').setAttribute('aria-expanded', 'true');
   if (sel >= 0) $('#q').setAttribute('aria-activedescendant', 'h' + sel); else $('#q').removeAttribute('aria-activedescendant');
 }
@@ -65,7 +81,7 @@ $('#results').addEventListener('click', (e) => { const li = e.target.closest('[d
 document.addEventListener('click', (e) => { if (!e.target.closest('.search')) closeHits(); });
 function choose(p) {
   closeHits(); $('#q').value = name(p); $('#q').blur();
-  map.flyTo(...p.ll, p.t === 'd' ? 140 : 60); map.setMarker(p.ll, '#60a5fa');
+  map.flyTo(...p.ll, p.t === 'd' ? 220 : 130); map.setMarker(p.ll, '#0A6787');
   state.view?.onPlace?.(p);
 }
 
@@ -91,19 +107,18 @@ window.addEventListener('hashchange', () => { route(); panel.scrollTop = 0; if (
 // ---------- boot ----------
 export function drawLayers() {
   const L = state.latest; if (!L || !map.ready()) return;
-  map.setPoints('rivers', L.rivers, riverColor, (r) => (r.status === 'BELOW WARNING LEVEL' ? 8 : 12));
-  map.setPoints('rain', L.rain, () => LAYER_COLOR.rain, (r) => 6 + Math.min(10, (r.h24 || 0) / 10));
-  map.setPoints('quakes', L.quakes.slice(0, 100), () => LAYER_COLOR.quakes, (q) => 2 + q.mag * 1.4);
-  map.setPoints('incidents', L.incidents.filter((i) => i.ll), (i) => (i.hazard === 26 ? '#e879f9' : LAYER_COLOR.incidents), () => 6);
+  map.setPoints('rivers', L.rivers, riverColor, (r) => (r.status === 'BELOW WARNING LEVEL' ? 10 : 14));
+  map.setPoints('rain', L.rain, () => LAYER_COLOR.rain, (r) => 8 + Math.min(10, (r.h24 || 0) / 10));
+  map.setPoints('quakes', L.quakes.slice(0, 100), () => LAYER_COLOR.quakes, (q) => 4 + q.mag * 1.5);
+  map.setPoints('incidents', L.incidents.filter((i) => i.ll), () => LAYER_COLOR.incidents, () => 8);
   for (const k in state.layers) map.showLayer(k, state.layers[k] && !state.view?.hideLayers);
 }
 
 applyText();
 const dataP = Promise.all([fetch('data/latest.json').then((r) => r.json()), fetch('data/places.json').then((r) => r.json())])
   .then(([l, p]) => { state.latest = l; state.places = p; });
-const mapP = mapModule.then((m) => m.init(document.getElementById('gl'), { onPick: (x) => state.view?.onPick?.(x), onFrame: (now) => state.view?.onFrame?.(now) }));
+const mapP = mapModule.then((m) => { m.setOnView(onView); return m.init(document.getElementById('gl'), { onPick: (x) => state.view?.onPick?.(x), onFrame: (now) => state.view?.onFrame?.(now) }); });
 export const dataReady = dataP;
 export const mapReady = mapP;
 export const ready = Promise.all([dataP, mapP]).then(() => { drawLayers(); });
 route();
-ready.then(() => { if (!location.hash || location.hash === '#/') map.overview(); });

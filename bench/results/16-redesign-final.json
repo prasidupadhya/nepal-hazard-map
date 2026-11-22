@@ -1,0 +1,61 @@
+{
+ "label": "16-redesign-final",
+ "runs": 5,
+ "startup": {
+  "fcp": 464,
+  "content": 823,
+  "map": 2914,
+  "tbt": 256,
+  "kb": 420,
+  "jsKb": 145
+ },
+ "screens": {
+  "data": 197,
+  "glof": 25,
+  "quake": 126,
+  "about": 10,
+  "map": 7
+ },
+ "content": {
+  "GLOF result (cold route grid)": 1499,
+  "quake first shaking": 29,
+  "quake slider step": 208,
+  "data list open (rain)": 13,
+  "data list open (incidents)": 181,
+  "load older #1": 260,
+  "rows after older #1": 271,
+  "load older #2": 257,
+  "rows after older #2": 309,
+  "load older #3": 297,
+  "rows after older #3": 329
+ },
+ "scroll": {
+  "rain": {
+   "p50": 16.7,
+   "p95": 16.8,
+   "jank": 0
+  },
+  "incidents": {
+   "p50": 16.7,
+   "p95": 16.7,
+   "jank": 0
+  }
+ },
+ "frames": {
+  "map drag": {
+   "p50": 233.3,
+   "p95": 283.3,
+   "jank": 89.8
+  },
+  "GLOF animation": {
+   "p50": 116.7,
+   "p95": 133.4,
+   "jank": 95.7
+  },
+  "quake animation": {
+   "p50": 133.3,
+   "p95": 166.7,
+   "jank": 94.9
+  }
+ }
+}

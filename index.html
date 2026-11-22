@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Nepal Hazard Map</title>
-<meta name="description" content="Floods, glacial lake outbursts and earthquakes in Nepal: daily copies of official data (DHM, BIPAD, NEMRC) on a 3D map, with what-if scenarios. Not an official warning.">
-<meta name="theme-color" content="#0d1620">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M2 26 12 8l6 10 4-6 8 14z' fill='%2360a5fa'/%3E%3C/svg%3E">
+<meta name="description" content="Floods, glacial lake outbursts and earthquakes in Nepal: daily copies of official data (DHM, BIPAD, NEMRC) on a 3D relief model, with what-if scenarios. Not an official warning.">
+<meta name="theme-color" content="#E7ECEA">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M2 25 11 11l4 5 6-9 9 18z' fill='%231B2A32'/%3E%3Cpath d='M2 27h28' stroke='%230A6787' stroke-width='2'/%3E%3C/svg%3E">
 <link rel="preload" href="data/latest.json" as="fetch" crossorigin="anonymous">
 <link rel="preload" href="data/places.json" as="fetch" crossorigin="anonymous">
 <link rel="stylesheet" href="/src/style.css">
@@ -14,19 +14,31 @@
 <body>
 <a class="skip" href="#panel">Skip to content</a>
 <header class="top">
-  <a class="brand" href="#/"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M2 26 12 8l6 10 4-6 8 14z" fill="currentColor"/></svg><span data-t="short"></span></a>
-  <nav id="nav" aria-label="Main"></nav>
-  <button id="lang" class="lang" type="button"></button>
+  <div class="topbar">
+    <a class="brand" href="#/">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M2 25 11 11l4 5 6-9 9 18z" fill="currentColor"/><path d="M2 27.5h28" stroke="var(--melt)" stroke-width="2"/></svg>
+      <span data-t="short"></span>
+    </a>
+    <nav id="nav" aria-label="Main"></nav>
+    <button id="lang" class="lang" type="button"></button>
+  </div>
+  <p class="disclaimer" role="note"><span class="long" data-t="disclaimer"></span><span class="short" data-t="disclaimerShort"></span></p>
 </header>
-<p class="disclaimer" role="note"><strong>!</strong> <span data-t="disclaimer"></span></p>
 <main id="main">
-  <section id="stage" aria-label="3D map">
+  <section id="stage" aria-label="3D relief map of Nepal">
     <div id="gl"></div>
     <div class="search" role="search">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="5.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m13 13 4.5 4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
       <input id="q" type="search" autocomplete="off" spellcheck="false" aria-controls="results" aria-expanded="false">
       <ul id="results" role="listbox" hidden></ul>
     </div>
-    <div id="chips" class="chips"></div>
+    <div class="margin">
+      <div id="chips" class="key" role="group"></div>
+      <div class="instruments">
+        <div class="scale" aria-hidden="true"><i id="scalebar"></i><span id="scalelabel"></span></div>
+        <button id="northbtn" class="north" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 17 20 12 16 7 20z" fill="currentColor"/></svg><span>N</span></button>
+      </div>
+    </div>
     <div id="legend" class="legend" hidden></div>
   </section>
   <section id="panel" tabindex="-1"></section>

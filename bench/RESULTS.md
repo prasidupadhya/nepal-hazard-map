@@ -33,3 +33,22 @@ Profile: mid-range phone (Lighthouse mobile): 4× CPU slowdown, slow 4G (150 ms 
 
 Caveat: 3D frame times come from SwiftShader (software GPU, with a per-frame canvas readback that real
 phones do not have). They are valid for before/after comparison, not as absolute phone frame rates.
+
+## Redesign (relief slab, contours, Anek Latin) — cost check
+
+Same profile. Before = last result above; after = redesigned site.
+
+| Metric | Before | After |
+|---|---|---|
+| First paint | 436 ms | 464 ms |
+| Content visible | 774 ms | 823 ms |
+| 3D map ready | 2 691 ms | 2 914 ms |
+| Startup bytes | 364 KB | 420 KB (+59 KB font subset) |
+| GLOF first result / quake screen open | 1 371 / 146 ms | 1 499 / 126 ms |
+| Scrolling p95, janky frames | 16.7 ms, 0 % | 16.8 ms, 0 % |
+| First quake open / back to map (SwiftShader) | 1 704 / 485 ms | 1 985 / 842 ms |
+
+Kept: no font preload (it delayed first paint by 156 ms), 1024 px first texture at q74 (−16 KB),
+scale-bar updates without layout reads. The first-open rows are ~90 % `GLES2::ReadPixels`
+(software GPU + compositor readback), i.e. per-pixel shader cost in the emulator; on a real GPU
+the added contour/fog work is a few ALU ops per pixel.

@@ -117,28 +117,33 @@ const v = grid(VIEW), vbuf = Buffer.alloc(VIEW.nx * VIEW.ny);
 for (let k = 0; k < v.length; k++) vbuf[k] = Math.min(255, Math.round(Math.sqrt(v[k]) * 2.68));
 await sharp(vbuf, { raw: { width: VIEW.nx, height: VIEW.ny, channels: 1 } }).png({ compressionLevel: 9 }).toFile(OUT + 'height.png');
 
-// 4. texture: hypsometric tint × hillshade, rivers from accumulation, outside Nepal dimmed
-const TXW = 2048, TXH = Math.round((TXW * (BOX.n - BOX.s)) / (BOX.e - BOX.w)), tex = Buffer.alloc(TXW * TXH * 3);
-const ramp = [[0, [86, 128, 76]], [300, [120, 150, 88]], [1000, [168, 160, 110]], [2000, [150, 120, 92]], [3500, [130, 112, 104]], [4800, [205, 205, 210]], [6000, [250, 251, 255]]];
+// 4. texture: plaster-relief style. Pale hypsometric tint × cool hillshade, meltwater rivers.
+// Outside Nepal the relief is kept but turned to mist grey so the country reads as the model.
+const TXW = 2048, TXH = Math.round((TXW * (BOX.n - BOX.s)) / (BOX.e - BOX.w)), tex = Buffer.alloc(TXW * TXH * 3), shadeBuf = new Float32Array(TXW * TXH);
+const ramp = [[0, [200, 216, 178]], [300, [214, 222, 186]], [1000, [228, 222, 196]], [2000, [222, 211, 190]], [3500, [214, 208, 202]], [4800, [236, 238, 240]], [6000, [252, 253, 255]]];
 const tint = (e) => { for (let k = 1; k < ramp.length; k++) if (e <= ramp[k][0]) { const [a, ca] = ramp[k - 1], [b, cb] = ramp[k], t = (e - a) / (b - a); return ca.map((c, i) => c + (cb[i] - c) * t); } return ramp.at(-1)[1]; };
 const sx = (BOX.e - BOX.w) / TXW, sy = (BOX.n - BOX.s) / TXH;
 for (let j = 0; j < TXH; j++) for (let i = 0; i < TXW; i++) {
   const lon = BOX.w + (i + 0.5) * sx, lat = BOX.n - (j + 0.5) * sy, e = sample(lon, lat);
   const dx = (sample(lon + sx, lat) - sample(lon - sx, lat)) / (2 * sx * kmPerDegLon(lat) * 1000), dy = (sample(lon, lat + sy) - sample(lon, lat - sy)) / (2 * sy * KM_PER_DEG_LAT * 1000);
-  const nz = 1 / Math.hypot(dx * 2, dy * 2, 1), shade = Math.max(0, (-dx * 2 * -0.5 + -dy * 2 * 0.6 + 0.62) * nz); // light from NW, 2× exaggeration
-  const c = tint(e), s = 0.45 + 0.75 * shade, k = (j * TXW + i) * 3;
-  for (let q = 0; q < 3; q++) tex[k + q] = Math.min(255, c[q] * s);
+  const nz = 1 / Math.hypot(dx * 2, dy * 2, 1), shade = Math.max(0, (dx * 2 * 0.5 - dy * 2 * 0.6 + 0.62) * nz); // light from NW, 2× exaggeration
+  shadeBuf[j * TXW + i] = shade;
+  const c = tint(e), k = (j * TXW + i) * 3;
+  // shadows go cool blue-grey, lit faces stay warm-white
+  const lit = Math.min(1.15, 0.55 + 0.7 * shade), shadowTint = [0.86, 0.92, 1.04];
+  for (let q = 0; q < 3; q++) tex[k + q] = Math.min(255, c[q] * lit * (shade < 0.62 ? 1 + (shadowTint[q] - 1) * (0.62 - shade) * 1.6 : 1));
   const ri = Math.floor((lon - BOX.w) / ROUTE.step), rj = Math.floor((BOX.n - lat) / ROUTE.step), a = acc[rj * nx + ri];
-  if (a > 400) { const w = Math.min(1, 0.35 + Math.log10(a / 400) * 0.45); tex[k] = tex[k] * (1 - w) + 60 * w; tex[k + 1] = tex[k + 1] * (1 - w) + 130 * w; tex[k + 2] = tex[k + 2] * (1 - w) + 200 * w; }
+  if (a > 300) { const w = Math.min(0.95, 0.42 + Math.log10(a / 300) * 0.42); tex[k] = tex[k] * (1 - w) + 10 * w; tex[k + 1] = tex[k + 1] * (1 - w) + 103 * w; tex[k + 2] = tex[k + 2] * (1 - w) + 135 * w; }
 }
 const topo = JSON.parse(fs.readFileSync('node_modules/world-atlas/countries-10m.json'));
 const nepal = feature(topo, topo.objects.countries).features.find((f) => f.properties.name === 'Nepal');
 const ring = nepal.geometry.type === 'Polygon' ? nepal.geometry.coordinates[0] : nepal.geometry.coordinates.flat()[0];
 const d = 'M' + ring.map(([lo, la]) => `${((lo - BOX.w) / sx).toFixed(1)},${((BOX.n - la) / sy).toFixed(1)}`).join('L') + 'Z';
 const mask = await sharp(Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${TXW}" height="${TXH}"><rect width="100%" height="100%" fill="#000"/><path d="${d}" fill="#fff"/></svg>`)).greyscale().raw().toBuffer();
-for (let k = 0; k < TXW * TXH; k++) if (mask[k] < 128) { const g = (tex[3 * k] + tex[3 * k + 1] + tex[3 * k + 2]) / 3; for (let q = 0; q < 3; q++) tex[3 * k + q] = (g * 0.7 + tex[3 * k + q] * 0.3) * 0.55; }
-const border = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${TXW}" height="${TXH}"><path d="${d}" fill="none" stroke="#fff" stroke-opacity=".85" stroke-width="2.2"/></svg>`);
+// outside Nepal: mist relief (#E7ECEA lit, cooler in shadow), rivers faint
+for (let k = 0; k < TXW * TXH; k++) if (mask[k] < 128) { const s2 = Math.min(1.1, 0.72 + 0.4 * shadeBuf[k]); const m = [231, 236, 234]; for (let q = 0; q < 3; q++) tex[3 * k + q] = Math.min(255, m[q] * s2 * (q === 2 ? 1.01 : 1)); }
+const border = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${TXW}" height="${TXH}"><path d="${d}" fill="none" stroke="#1B2A32" stroke-opacity=".7" stroke-width="2"/></svg>`);
 const full = await sharp(tex, { raw: { width: TXW, height: TXH, channels: 3 } }).composite([{ input: border }]).png().toBuffer();
 await sharp(full).jpeg({ quality: 82, mozjpeg: true }).toFile(OUT + 'texture.jpg');              // sharp, loaded when idle
-await sharp(full).resize(1024).jpeg({ quality: 80, mozjpeg: true }).toFile(OUT + 'texture-1024.jpg'); // first paint
+await sharp(full).resize(1024).jpeg({ quality: 74, mozjpeg: true }).toFile(OUT + 'texture-1024.jpg'); // first paint
 console.log('ok', { tilesPx: [TW, TH], route: [nx, ny], view: [VIEW.nx, VIEW.ny], tex: [TXW, TXH], maxAcc: acc.reduce((m, x) => Math.max(m, x), 0) });

@@ -14,6 +14,7 @@ and local authorities.
 | Flood / GLOF incidents | BIPAD (bipadportal.gov.np) | copied daily, archived by month |
 | Districts | Constitution of Nepal, Schedule 4 | `src/districts.js` |
 | Terrain | AWS Terrain Tiles (SRTM etc.), Natural Earth border | baked once by `scripts/bake-terrain.js` |
+| Typeface | Anek Latin (Ek Type), SIL Open Font License | `public/fonts/` (licence in `OFL.txt`) |
 
 Every copy records when it was made and how old the newest reading is; the
 site shows both. A failed copy keeps the previous one and says so.
@@ -25,6 +26,7 @@ npm test                 # parsers, districts, scenario maths, WASM = JS
 npm run fetch            # copy official data now (needs network)
 npm run wasm             # rebuild the Rust → WebAssembly scenario engine
 npm run build            # static site in dist/
+./scripts/subset-font.sh # rebuild the Anek Latin subset (needs: pip install fonttools brotli)
 node e2e/check.mjs       # browser checks (serve dist first: npx vite preview)
 ```
 

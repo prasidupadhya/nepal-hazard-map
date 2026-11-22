@@ -30,6 +30,10 @@ const ctx = await browser.newContext({ viewport: { width: 390, height: 800 } });
 await page.goto(BASE + '#/'); await page.waitForSelector('#panel .feeds', { timeout: 30000 });
 await page.fill('#q', 'pokh'); const first = await page.textContent('#results li'); ok(/Pokhara/.test(first), `search "pokh" → ${first}`);
 await page.fill('#q', 'काठमाडौं'); const ne = await page.textContent('#results li'); ok(/Kathmandu/.test(ne), `Nepali search → ${ne}`);
+// tapping the map picks real ground (projection is offset beside the sheet on desktop)
+{ const d = await browser.newPage({ viewport: { width: 1280, height: 800 } }); await d.goto(BASE + '#/glof'); await d.waitForFunction(() => performance.getEntriesByName('map-ready').length); await d.waitForTimeout(2500);
+  await d.mouse.click(300, 450); await d.waitForTimeout(300);
+  const v = await d.$eval('#lake', (s) => s.value); ok(v === 'custom', `desktop map tap sets a custom start point (${v})`); await d.close(); }
 await page.goto(BASE + '#/glof'); await page.waitForSelector('#run'); await page.click('#run');
 await page.waitForSelector('#out table tbody tr', { timeout: 30000 });
 const rows = await page.$$eval('#out tbody tr', (t) => t.map((r) => r.innerText));
