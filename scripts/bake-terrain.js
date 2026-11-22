@@ -71,7 +71,45 @@ for (const c of order) if (dir[c]) { const [dx, dy] = D8[dir[c] - 1]; acc[c + dy
 // route.png: R,G = raw elevation (m), B = D8 code. Raw (not filled) elevation keeps lake-surface slopes honest.
 const rbuf = Buffer.alloc(N * 3);
 for (let k = 0; k < N; k++) { const e = Math.round(z[k]); rbuf[3 * k] = e >> 8; rbuf[3 * k + 1] = e & 255; rbuf[3 * k + 2] = dir[k]; }
-await sharp(rbuf, { raw: { width: nx, height: ny, channels: 3 } }).png({ compressionLevel: 9 }).toFile(OUT + 'route.png');
+// full grid = test oracle only (2.7 MB); the site loads 64×64 tiles instead
+await sharp(rbuf, { raw: { width: nx, height: ny, channels: 3 } }).png({ compressionLevel: 9 }).toFile('test/fixtures/route-full.png');
+const TS = 64, ntx = Math.ceil(nx / TS), nty = Math.ceil(ny / TS);
+fs.rmSync(OUT + 'route', { recursive: true, force: true }); fs.mkdirSync(OUT + 'route', { recursive: true });
+for (let ty = 0; ty < nty; ty++) for (let tx = 0; tx < ntx; tx++) {
+  const w = Math.min(TS, nx - tx * TS), h = Math.min(TS, ny - ty * TS), b = Buffer.alloc(w * h * 3);
+  for (let y = 0; y < h; y++) rbuf.copy(b, y * w * 3, ((ty * TS + y) * nx + tx * TS) * 3, ((ty * TS + y) * nx + tx * TS + w) * 3);
+  await sharp(b, { raw: { width: w, height: h, channels: 3 } }).png({ compressionLevel: 9 }).toFile(`${OUT}route/${tx}_${ty}.png`);
+}
+// For each tile, every tile that a flow path starting in it can visit (same stop rule as tracePath).
+const tileOf = (c) => Math.floor((c % nx) / TS) + Math.floor(Math.floor(c / nx) / TS) * ntx;
+const memo = new Map(); // entry cell -> Set of tiles visited from there
+function fromCell(c0) {
+  const chain = []; let c = c0, set = null;
+  while (true) {
+    if (memo.has(c)) { set = memo.get(c); break; }
+    chain.push(c); const t = tileOf(c);
+    let k = c, out = -1;
+    while (true) { // walk inside tile t
+      if (!dir[k] || z[k] < 120) break;
+      const [dx, dy] = D8[dir[k] - 1], n = k + dy * nx + dx;
+      if (tileOf(n) !== t) { out = n; break; }
+      k = n;
+    }
+    if (out < 0) { set = new Set(); break; }
+    c = out;
+  }
+  for (let q = chain.length - 1; q >= 0; q--) { set = new Set(set); set.add(tileOf(chain[q])); memo.set(chain[q], set); }
+  return set;
+}
+const down = {};
+for (let ty = 0; ty < nty; ty++) for (let tx = 0; tx < ntx; tx++) {
+  const all = new Set();
+  for (let y = ty * TS; y < Math.min(ny, ty * TS + TS); y++) for (let x = tx * TS; x < Math.min(nx, tx * TS + TS); x++) for (const t of fromCell(y * nx + x)) all.add(t);
+  down[tx + ty * ntx] = [...all].sort((a, b) => a - b);
+}
+fs.writeFileSync(OUT + 'route/index.json', JSON.stringify({ size: TS, ntx, nty, down }));
+const lens = Object.values(down).map((d) => d.length);
+console.log('route tiles', ntx * nty, 'max downstream tiles', Math.max(...lens), 'mean', (lens.reduce((a, b) => a + b) / lens.length).toFixed(1));
 
 // 3. view grid heights (R,G) for the 3D mesh
 const v = grid(VIEW), vbuf = Buffer.alloc(VIEW.nx * VIEW.ny * 3);

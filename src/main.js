@@ -88,6 +88,7 @@ export async function route() {
   if (!v.full) requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
   $('#legend').hidden = true;
   await v.enter(panel, () => my === gen);
+  if (my === gen) performance.mark('view:' + key);
 }
 window.addEventListener('hashchange', () => { route(); panel.scrollTop = 0; if (document.body.classList.contains('full')) window.scrollTo(0, 0); });
 

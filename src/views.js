@@ -5,7 +5,8 @@ import { MMI_COLORS } from './map3d.js';
 import { state, ready, mapMsg, showChips, riverColor, searchPlaces } from './main.js';
 import { LAKES } from './lakes.js';
 import { PROVINCES } from './districts.js';
-import { ROUTE, VIEW } from './grid.js';
+import { VIEW } from './grid.js';
+import { makeRouteLoader } from './route-tiles.js';
 import * as js from './scenario.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -45,17 +46,19 @@ function doPrint() {
 }
 
 // Scenario engine: Rust→WASM when available (faster on phones), JS otherwise. Same results (tested).
-let engineP = null, routeP = null;
+let engineP = null;
 const engine = () => (engineP ??= import('./scenario-wasm.js').then((m) => m.loadWasm('wasm/scenario.wasm')).catch(() => null));
-const routeData = () => (routeP ??= (async () => {
-  const bmp = await createImageBitmap(await (await fetch('terrain/route.png')).blob(), { colorSpaceConversion: 'none', premultiplyAlpha: 'none' });
+async function tilePixels(url) {
+  const bmp = await createImageBitmap(await (await fetch(url)).blob(), { colorSpaceConversion: 'none', premultiplyAlpha: 'none' });
   const c = new OffscreenCanvas(bmp.width, bmp.height).getContext('2d', { willReadFrequently: true }); c.drawImage(bmp, 0, 0);
-  const px = c.getImageData(0, 0, bmp.width, bmp.height).data, N = ROUTE.nx * ROUTE.ny, dir = new Uint8Array(N), elev = new Int16Array(N);
-  for (let k = 0; k < N; k++) { elev[k] = (px[4 * k] << 8) | px[4 * k + 1]; dir[k] = px[4 * k + 2]; }
-  const r = { nx: ROUTE.nx, ny: ROUTE.ny, dir, elev }, w = await engine();
-  if (w) w.setRoute(r);
-  return r;
-})());
+  return { w: bmp.width, h: bmp.height, rgb: c.getImageData(0, 0, bmp.width, bmp.height).data };
+}
+const loadTiles = makeRouteLoader((tx, ty) => tilePixels(`terrain/route/${tx}_${ty}.png`), () => fetch('terrain/route/index.json').then((r) => r.json()));
+async function routeFor(ll) {
+  const [{ grid, added }, w] = await Promise.all([loadTiles(...ll), engine()]);
+  if (w && added) w.setRoute(grid);
+  return grid;
+}
 
 // ---------- MAP ----------
 const mapView = {
@@ -151,20 +154,20 @@ const glofView = {
       <div id="out"></div>`;
     const sel = el.querySelector('#lake'), v0 = el.querySelector('#v0'), v1 = el.querySelector('#v1');
     sel.value = G.lake.id || 'custom'; v0.value = G.vol[0]; v1.value = G.vol[1];
-    sel.onchange = () => { const l = LAKES.find((x) => x.id === sel.value); if (l) { G.lake = l; G.vol = l.vol.slice(); v0.value = l.vol[0]; v1.value = l.vol[1]; map.setMarker(l.ll, '#e879f9'); map.flyTo(...l.ll, 90); } };
+    sel.onchange = () => { const l = LAKES.find((x) => x.id === sel.value); if (l) { G.lake = l; G.vol = l.vol.slice(); v0.value = l.vol[0]; v1.value = l.vol[1]; map.setMarker(l.ll, '#e879f9'); map.flyTo(...l.ll, 90); routeFor(l.ll); } };
     el.querySelector('#run').onclick = () => {
       const a = Math.max(0.1, +v0.value || 0), b = Math.max(a, +v1.value || 0); G.vol = [a, b]; v0.value = a; v1.value = b; run(el, live);
     };
     await ready; if (!live()) return;
     map.setMarker(G.lake.ll, '#e879f9');
     if (G.res) { map.setPath(G.res); showResult(el); map.setPathTime(G.t); } else map.flyTo(...G.lake.ll, 90);
-    routeData(); // start loading the routing grid while the user reads
+    routeFor(G.lake.ll); // start loading this lake's tiles while the user reads
   },
   onPick({ ground, item }) {
     const ll = ground || item?.ll; if (!ll) return;
     G.lake = { id: null, en: `${ll[1].toFixed(3)}°N ${ll[0].toFixed(3)}°E`, ne: `${num(ll[1], 3)}° उ. ${num(ll[0], 3)}° पू.`, ll };
     const s = document.getElementById('lake'); if (s) s.value = 'custom';
-    map.setMarker(ll, '#e879f9');
+    map.setMarker(ll, '#e879f9'); routeFor(ll);
   },
   onPlace(p) { this.onPick({ ground: p.ll }); if (p.t === 'l') { const l = LAKES.find((x) => x.id === p.id); if (l) { G.lake = l; document.getElementById('lake').value = l.id; } } },
   onFrame(now) {
@@ -180,12 +183,13 @@ const glofView = {
 };
 async function run(el, live) {
   const out = el.querySelector('#out'); out.innerHTML = `<p class="note">${t('loading')}</p>`;
-  const r = await routeData(), w = await engine(); if (!live()) return;
+  const r = await routeFor(G.lake.ll), w = await engine(); if (!live()) return;
   G.res = w ? w.glof(...G.lake.ll, G.vol) : js.glof(js.tracePath(r, ...G.lake.ll), G.vol);
   G.t = 0; G.playing = true; G.last = 0;
   map.setPath(G.res); map.setPathTime(0);
   const mid = G.res[Math.floor(G.res.length / 2)]; map.flyTo(...mid.ll, Math.min(420, 60 + G.res.at(-1).km * 0.9));
   showResult(el);
+  performance.mark('glof-result');
 }
 function placesAlong(res) {
   const out = [], seen = new Set();
@@ -267,6 +271,7 @@ async function update(animate) {
     map.setShaking(grid, a, b); map.setMarker(Q.ll, '#ff3b30');
     if (animate) { Q.r = 0; Q.last = 0; Q.animating = true; } else map.setShakeRadius((Q.r = 800));
     renderQuakeTable();
+    performance.mark('quake-shaking');
   });
 }
 function renderQuakeTable() {

@@ -10,7 +10,7 @@ const KX = kmPerDegLon(C.lat), EXAG = 2.5;
 export const toXZ = (lon, lat) => [(lon - C.lon) * KX, (C.lat - lat) * KM_PER_DEG_LAT];
 export const toLL = (x, z) => [C.lon + x / KX, C.lat - z / KM_PER_DEG_LAT];
 
-let renderer, scene, camera, controls, terrain, heights, host, dirty = true, anim = null, onPick = null, onFrame = null;
+let firstFrame = false, renderer, scene, camera, controls, terrain, heights, host, dirty = true, anim = null, onPick = null, onFrame = null;
 const layers = {};
 const uni = {
   map: { value: null }, overlay: { value: null }, overlayOn: { value: 0 },
@@ -104,7 +104,7 @@ function loop(now) {
   if (anim) { const p = Math.min(1, (now - anim.t0) / anim.ms); anim.step(p < 0.5 ? 4 * p * p * p : 1 - (-2 * p + 2) ** 3 / 2); if (p >= 1) anim = null; dirty = true; }
   if (onFrame && onFrame(now)) dirty = true;
   const moved = controls.update();
-  if (dirty || moved) { renderer.render(scene, camera); dirty = false; }
+  if (dirty || moved) { renderer.render(scene, camera); dirty = false; if (terrain && !firstFrame) { firstFrame = true; performance.mark('map-ready'); } }
 }
 
 // Smooth camera flight to a place; `dist` = viewing distance in km.

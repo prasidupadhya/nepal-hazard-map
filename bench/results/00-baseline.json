@@ -1,0 +1,61 @@
+{
+ "label": "00-baseline",
+ "runs": 5,
+ "startup": {
+  "fcp": 408,
+  "content": 4285,
+  "map": 4234,
+  "tbt": 382,
+  "kb": 695,
+  "jsKb": 141
+ },
+ "screens": {
+  "data": 224,
+  "glof": 21,
+  "quake": 207,
+  "about": 8,
+  "map": 5
+ },
+ "content": {
+  "GLOF result (cold route grid)": 12648,
+  "quake first shaking": 63,
+  "quake slider step": 274,
+  "data list open (rain)": 14,
+  "data list open (incidents)": 176,
+  "load older #1": 232,
+  "rows after older #1": 238,
+  "load older #2": 879,
+  "rows after older #2": 258,
+  "load older #3": 395,
+  "rows after older #3": 282
+ },
+ "scroll": {
+  "rain": {
+   "p50": 16.7,
+   "p95": 16.7,
+   "jank": 0
+  },
+  "incidents": {
+   "p50": 16.7,
+   "p95": 16.7,
+   "jank": 0
+  }
+ },
+ "frames": {
+  "map drag": {
+   "p50": 216.6,
+   "p95": 250,
+   "jank": 81.4
+  },
+  "GLOF animation": {
+   "p50": 183.3,
+   "p95": 216.7,
+   "jank": 93.3
+  },
+  "quake animation": {
+   "p50": 183.3,
+   "p95": 249.9,
+   "jank": 93.3
+  }
+ }
+}
