@@ -97,7 +97,8 @@ export async function init(el, { onPick: pick, onFrame: frame } = {}) {
 
 function resize() {
   if (!renderer) return;
-  const w = host.clientWidth || 1, h = host.clientHeight || 1;
+  const w = host.clientWidth, h = host.clientHeight;
+  if (!w || !h) return; // map hidden (data/about pages): keep the framebuffer as is
   renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); dirty = true;
 }
 export const requestRender = () => { dirty = true; };
