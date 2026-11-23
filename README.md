@@ -42,8 +42,14 @@ phones, works in both languages, and prints a clean report.
 | Lake burst | Earthquake |
 |---|---|
 | ![A flood path from Tsho Rolpa to the Nepal border](docs/img/glof.jpg) | ![Likely shaking from a magnitude 7.8 earthquake](docs/img/quake.jpg) |
-| **Printed report** | **On a phone, in both languages** |
-| ![Printed lake burst report](docs/img/print-glof.jpg) | <img src="docs/img/phone.jpg" width="48%" alt="Map on a phone in English"> <img src="docs/img/phone-ne.jpg" width="48%" alt="Map on a phone in Nepali"> |
+
+**On a phone, in both languages**
+
+<p><img src="docs/img/phone.jpg" width="32%" alt="Map on a phone in English"> <img src="docs/img/phone-ne.jpg" width="32%" alt="Map on a phone in Nepali"></p>
+
+**Printed reports** (page 1 of 2; click for full size)
+
+<p><a href="docs/img/print-glof.jpg"><img src="docs/img/print-glof.jpg" width="49%" alt="Printed lake burst report: key figures and a north-up map of the flood path to the Nepal border"></a> <a href="docs/img/print-quake.jpg"><img src="docs/img/print-quake.jpg" width="49%" alt="Printed earthquake report: key figures, a shaking map and districts grouped by likely shaking"></a></p>
 
 ## Where the data comes from
 
