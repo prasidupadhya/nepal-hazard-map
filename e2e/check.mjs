@@ -5,7 +5,7 @@ const { chromium } = createRequire(import.meta.url)(process.env.PW || 'playwrigh
 const BASE = process.argv[2] || 'http://localhost:4173/';
 const SHOTS = process.env.SHOTS || '';
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
-const fails = []; const ok = (c, m) => { if (!c) fails.push(m); console.log(c ? 'PASS' : 'FAIL', m); };
+const fails = []; const ok = (c, m) => { if (!c) fails.push(m); console.log(c ? 'PASS' : 'FAIL', m); if (!c && process.env.GITHUB_ACTIONS) console.log(`::error title=e2e::${String(m).replace(/\n/g, ' ')}`); };
 for (const lang of ['en', 'ne']) for (const width of [360, 1280]) {
   const ctx = await browser.newContext({ viewport: { width, height: width < 500 ? 740 : 800 }, deviceScaleFactor: 1 });
   const page = await ctx.newPage(); const errs = [];
@@ -104,7 +104,8 @@ for (const tab of ['incidents', 'quakes']) {
   const p = await ctx.newPage();
   await p.goto(BASE + '#/glof'); await p.waitForFunction(() => performance.getEntriesByName('map-ready').length, null, { timeout: 90000 });
   await p.locator('#run').scrollIntoViewIfNeeded(); const y0 = await p.evaluate(() => scrollY);
-  await p.tap('#run'); await p.waitForSelector('#out tbody tr', { timeout: 30000 }); await p.waitForTimeout(900);
+  await p.tap('#run'); await p.waitForSelector('#out tbody tr', { timeout: 30000 });
+  await p.waitForFunction(() => scrollY === 0 && /Pause/.test(document.getElementById('play')?.textContent || ''), null, { timeout: 10000 }).catch(() => {});
   const st = await p.evaluate(() => ({ y: scrollY, t: document.getElementById('tout')?.textContent, play: document.getElementById('play')?.textContent }));
   ok(y0 > 100 && st.y === 0 && /Pause/.test(st.play), `phone: Run scrolls up to the map, then the flood plays (scrolled from ${y0} to ${st.y}; ${st.play}, ${st.t})`);
   await ctx.close(); }
