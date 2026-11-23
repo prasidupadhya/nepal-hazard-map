@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import sharp from 'sharp';
 import { feature } from 'topojson-client';
+import { fromFile } from 'geotiff';
 import { BOX, ROUTE, VIEW, D8, kmPerDegLon, KM_PER_DEG_LAT } from '../src/grid.js';
 
 const Z = 8, CACHE = '.cache/tiles/', OUT = 'public/terrain/';
@@ -38,36 +39,28 @@ const grid = (g) => {
   return a;
 };
 
-// 2. routing grid: priority-flood pit filling (Barnes et al. 2014, with epsilon) + D8
-const { nx, ny } = ROUTE, N = nx * ny, z = grid(ROUTE), filled = Float32Array.from(z), done = new Uint8Array(N);
-class Heap { // binary min-heap on filled elevation
-  constructor() { this.a = []; }
-  push(i) { const a = this.a; a.push(i); let c = a.length - 1; while (c) { const p = (c - 1) >> 1; if (filled[a[p]] <= filled[a[c]]) break; [a[p], a[c]] = [a[c], a[p]]; c = p; } }
-  pop() { const a = this.a, top = a[0], last = a.pop(); if (a.length) { a[0] = last; let p = 0; for (;;) { const l = 2 * p + 1, r = l + 1; let m = p; if (l < a.length && filled[a[l]] < filled[a[m]]) m = l; if (r < a.length && filled[a[r]] < filled[a[m]]) m = r; if (m === p) break; [a[p], a[m]] = [a[m], a[p]]; p = m; } } return top; }
-}
-const h = new Heap();
-for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) if (!i || !j || i === nx - 1 || j === ny - 1) { done[j * nx + i] = 1; h.push(j * nx + i); }
-while (h.a.length) {
-  const c = h.pop(), ci = c % nx, cj = (c / nx) | 0;
-  for (const [dx, dy] of D8) {
-    const i = ci + dx, j = cj + dy; if (i < 0 || j < 0 || i >= nx || j >= ny) continue;
-    const n = j * nx + i; if (done[n]) continue;
-    done[n] = 1; filled[n] = Math.max(filled[n], filled[c] + 1e-3); h.push(n);
-  }
-}
+// 2. routing grid = the HydroSHEDS 15″ grid (Lehner, Verdin & Jarvis 2008; free for any use with citation).
+// Its flow directions come from a DEM conditioned with mapped river lines, so they follow the real channels
+// even across the flat Terai, where directions computed from elevation alone wander.
+// Download once: data.hydrosheds.org/file/hydrosheds-v1-dir/hyd_as_dir_15s.zip → .cache/hydrosheds/
+const { nx, ny } = ROUTE, N = nx * ny, z = grid(ROUTE);
+const hs = await (await fromFile('.cache/hydrosheds/hyd_as_dir_15s.tif')).getImage(), [hx0, hy0] = hs.getOrigin();
+const col0 = Math.round((BOX.w - hx0) * 240), row0 = Math.round((hy0 - BOX.n) * 240);
+const [esri] = await hs.readRasters({ window: [col0, row0, col0 + nx, row0 + ny] });
+const ESRI = { 1: 1, 2: 2, 4: 3, 8: 4, 16: 5, 32: 6, 64: 7, 128: 8 }; // ESRI D8 → our D8 codes (E, SE, S, SW, W, NW, N, NE)
 const dir = new Uint8Array(N);
-for (let j = 1; j < ny - 1; j++) {
-  const kx = kmPerDegLon(BOX.n - (j + 0.5) * ROUTE.step) * ROUTE.step, ky = KM_PER_DEG_LAT * ROUTE.step;
-  for (let i = 1; i < nx - 1; i++) {
-    const c = j * nx + i; let best = 0, bs = 0;
-    D8.forEach(([dx, dy], d) => { const s = (filled[c] - filled[c + dy * nx + dx]) / Math.hypot(dx * kx, dy * ky); if (s > bs) { bs = s; best = d + 1; } });
-    dir[c] = best;
-  }
+for (let k = 0; k < N; k++) {
+  const d = ESRI[esri[k]] || 0; if (!d) continue;
+  const i = (k % nx) + D8[d - 1][0], j = ((k / nx) | 0) + D8[d - 1][1];
+  dir[k] = i >= 0 && j >= 0 && i < nx && j < ny ? d : 0; // flows out of the map: outlet
 }
-// flow accumulation (cells draining through each cell), processed high → low
-const order = Array.from({ length: N }, (_, i) => i).sort((a, b) => filled[b] - filled[a]);
-const acc = new Float32Array(N).fill(1);
-for (const c of order) if (dir[c]) { const [dx, dy] = D8[dir[c] - 1]; acc[c + dy * nx + dx] += acc[c]; }
+// flow accumulation (cells draining through each cell), in topological order
+const down = new Int32Array(N).fill(-1), indeg = new Int32Array(N);
+for (let k = 0; k < N; k++) if (dir[k]) { const [dx, dy] = D8[dir[k] - 1]; down[k] = k + dy * nx + dx; indeg[down[k]]++; }
+const acc = new Float32Array(N).fill(1), order = [];
+for (let k = 0; k < N; k++) if (!indeg[k]) order.push(k);
+for (let h = 0; h < order.length; h++) { const k = order[h], d = down[k]; if (d >= 0) { acc[d] += acc[k]; if (--indeg[d] === 0) order.push(d); } }
+if (order.length !== N) throw new Error('flow directions contain a cycle');
 // route.png: R,G = raw elevation (m), B = D8 code. Raw (not filled) elevation keeps lake-surface slopes honest.
 const rbuf = Buffer.alloc(N * 3);
 for (let k = 0; k < N; k++) { const e = Math.round(z[k]); rbuf[3 * k] = e >> 8; rbuf[3 * k + 1] = e & 255; rbuf[3 * k + 2] = dir[k]; }
@@ -80,36 +73,42 @@ for (let ty = 0; ty < nty; ty++) for (let tx = 0; tx < ntx; tx++) {
   for (let y = 0; y < h; y++) rbuf.copy(b, y * w * 3, ((ty * TS + y) * nx + tx * TS) * 3, ((ty * TS + y) * nx + tx * TS + w) * 3);
   await sharp(b, { raw: { width: w, height: h, channels: 3 } }).png({ compressionLevel: 9 }).toFile(`${OUT}route/${tx}_${ty}.png`);
 }
-// For each tile, every tile that a flow path starting in it can visit (same stop rule as tracePath).
+// For each tile, every tile that a flow path starting in it can visit, all the way to the map edge
+// (river traces follow rivers across the plains; flood scenarios stop earlier and need a subset).
 const tileOf = (c) => Math.floor((c % nx) / TS) + Math.floor(Math.floor(c / nx) / TS) * ntx;
-const memo = new Map(); // entry cell -> Set of tiles visited from there
-function fromCell(c0) {
-  const chain = []; let c = c0, set = null;
-  while (true) {
-    if (memo.has(c)) { set = memo.get(c); break; }
-    chain.push(c); const t = tileOf(c);
-    let k = c, out = -1;
-    while (true) { // walk inside tile t
-      if (!dir[k] || z[k] < 120) break;
-      const [dx, dy] = D8[dir[k] - 1], n = k + dy * nx + dx;
-      if (tileOf(n) !== t) { out = n; break; }
-      k = n;
+// stop(k): where a path ends. Floods stop at the plains (as tracePath does); river traces run to the map edge.
+function tilesDownstream(stop) {
+  const memo = new Map(); // entry cell -> Set of tiles visited from there
+  const fromCell = (c0) => {
+    const chain = []; let c = c0, set = null;
+    while (true) {
+      if (memo.has(c)) { set = memo.get(c); break; }
+      chain.push(c); const t = tileOf(c);
+      let k = c, out = -1;
+      while (true) { // walk inside tile t
+        if (!dir[k] || stop(k)) break;
+        const [dx, dy] = D8[dir[k] - 1], n = k + dy * nx + dx;
+        if (tileOf(n) !== t) { out = n; break; }
+        k = n;
+      }
+      if (out < 0) { set = new Set(); break; }
+      c = out;
     }
-    if (out < 0) { set = new Set(); break; }
-    c = out;
+    for (let q = chain.length - 1; q >= 0; q--) { set = new Set(set); set.add(tileOf(chain[q])); memo.set(chain[q], set); }
+    return set;
+  };
+  const res = {};
+  for (let ty = 0; ty < nty; ty++) for (let tx = 0; tx < ntx; tx++) {
+    const all = new Set();
+    for (let y = ty * TS; y < Math.min(ny, ty * TS + TS); y++) for (let x = tx * TS; x < Math.min(nx, tx * TS + TS); x++) for (const t of fromCell(y * nx + x)) all.add(t);
+    res[tx + ty * ntx] = [...all].sort((a, b) => a - b);
   }
-  for (let q = chain.length - 1; q >= 0; q--) { set = new Set(set); set.add(tileOf(chain[q])); memo.set(chain[q], set); }
-  return set;
+  return res;
 }
-const down = {};
-for (let ty = 0; ty < nty; ty++) for (let tx = 0; tx < ntx; tx++) {
-  const all = new Set();
-  for (let y = ty * TS; y < Math.min(ny, ty * TS + TS); y++) for (let x = tx * TS; x < Math.min(nx, tx * TS + TS); x++) for (const t of fromCell(y * nx + x)) all.add(t);
-  down[tx + ty * ntx] = [...all].sort((a, b) => a - b);
-}
-fs.writeFileSync(OUT + 'route/index.json', JSON.stringify({ size: TS, ntx, nty, down }));
-const lens = Object.values(down).map((d) => d.length);
-console.log('route tiles', ntx * nty, 'max downstream tiles', Math.max(...lens), 'mean', (lens.reduce((a, b) => a + b) / lens.length).toFixed(1));
+const downFlood = tilesDownstream((k) => z[k] < 120), downAll = tilesDownstream(() => false);
+fs.writeFileSync(OUT + 'route/index.json', JSON.stringify({ size: TS, ntx, nty, down: downFlood, downAll }));
+const mean = (o) => (Object.values(o).reduce((a, d) => a + d.length, 0) / (ntx * nty)).toFixed(1);
+console.log('route tiles', ntx * nty, 'mean tiles: flood', mean(downFlood), 'river trace', mean(downAll));
 
 // 3. view grid heights for the 3D mesh (display only): 8-bit, value = round(√h · 2.68),
 // so steps are ≤ 8 m below 500 m and ≤ 30 m on the highest peaks. Scenario maths use route tiles.
@@ -133,7 +132,8 @@ for (let j = 0; j < TXH; j++) for (let i = 0; i < TXW; i++) {
   const lit = Math.min(1.15, 0.55 + 0.7 * shade), shadowTint = [0.86, 0.92, 1.04];
   for (let q = 0; q < 3; q++) tex[k + q] = Math.min(255, c[q] * lit * (shade < 0.62 ? 1 + (shadowTint[q] - 1) * (0.62 - shade) * 1.6 : 1));
   const ri = Math.floor((lon - BOX.w) / ROUTE.step), rj = Math.floor((BOX.n - lat) / ROUTE.step), a = acc[rj * nx + ri];
-  if (a > 300) { const w = Math.min(0.95, 0.42 + Math.log10(a / 300) * 0.42); tex[k] = tex[k] * (1 - w) + 10 * w; tex[k + 1] = tex[k + 1] * (1 - w) + 103 * w; tex[k + 2] = tex[k + 2] * (1 - w) + 135 * w; }
+  // rivers on the texture: catchment ≥ 400 cells (~75 km²)
+  if (a > 400) { const w = Math.min(0.95, 0.42 + Math.log10(a / 400) * 0.42); tex[k] = tex[k] * (1 - w) + 10 * w; tex[k + 1] = tex[k + 1] * (1 - w) + 103 * w; tex[k + 2] = tex[k + 2] * (1 - w) + 135 * w; }
 }
 const topo = JSON.parse(fs.readFileSync('node_modules/world-atlas/countries-10m.json'));
 const nepal = feature(topo, topo.objects.countries).features.find((f) => f.properties.name === 'Nepal');

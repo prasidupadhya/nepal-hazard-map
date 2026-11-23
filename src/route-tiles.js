@@ -14,14 +14,16 @@ export function makeRouteLoader(fetchTile, fetchIndex) {
     }
   }
   // Ensures every tile needed for a path from (lon, lat) is in `grid`; returns { grid, added }.
-  return async function load(lon, lat) {
+  // toEdge: the path continues past the plains to the map edge (river traces), not just to the plains (floods).
+  return async function load(lon, lat, toEdge = false) {
     index ??= await fetchIndex();
     const i = Math.floor((lon - BOX.w) / ROUTE.step), j = Math.floor((BOX.n - lat) / ROUTE.step);
     if (i < 0 || j < 0 || i >= ROUTE.nx || j >= ROUTE.ny) return { grid, added: 0 };
     const start = Math.floor(i / index.size) + Math.floor(j / index.size) * index.ntx;
-    const need = index.down[start].filter((t) => !have.has(t));
+    const list = (toEdge ? index.downAll : index.down)[start];
+    const need = list.filter((t) => !have.has(t));
     for (const t of need) have.set(t, put(t));
-    await Promise.all(index.down[start].map((t) => have.get(t)));
+    await Promise.all(list.map((t) => have.get(t)));
     return { grid, added: need.length };
   };
 }

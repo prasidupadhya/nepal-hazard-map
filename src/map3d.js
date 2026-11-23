@@ -1,6 +1,9 @@
 // three.js terrain map. Renders on demand (only while something moves) to save battery.
 import * as THREE from 'three';
 import { MapControls } from 'three/examples/jsm/controls/MapControls.js';
+import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
+import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { BOX, VIEW, kmPerDegLon, KM_PER_DEG_LAT } from './grid.js';
 import { MMI_COLORS } from './colors.js';
 
@@ -11,6 +14,10 @@ export const toLL = (x, z) => [C.lon + x / KX, C.lat - z / KM_PER_DEG_LAT];
 
 const MIST = 0xe7ecea, BASE = 12; // page/fog colour; slab thickness below sea level (scene km)
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let netMinKm2 = 0; // scenario screens show only main rivers, for orientation
+export const setNetworkMin = (km2) => { netMinKm2 = km2; dirty = true; };
+let labelCanvas, lctx, labels = []; const labelW = new Map(), lineMats = [], netObjs = [];
+let hidden = false, labelKey = '';
 let inset = 0, cssH = 1, lastView = [1, 0], firstFrame = false, renderer, scene, camera, controls, terrain, heights, host, dirty = true, anim = null, onPick = null, onFrame = null, onView = null;
 const layers = {};
 // shared by terrain, slab sides, points: rise = intro animation (0 → 1), fog follows camera distance
@@ -87,6 +94,9 @@ export async function init(el, { onPick: pick, onFrame: frame } = {}) {
   renderer.setPixelRatio(pr); ptUni.pr.value = pr;
   renderer.setClearColor(MIST);
   el.appendChild(renderer.domElement);
+  labelCanvas = document.createElement('canvas'); labelCanvas.className = 'labels'; labelCanvas.setAttribute('aria-hidden', 'true');
+  el.appendChild(labelCanvas); lctx = labelCanvas.getContext('2d');
+  document.fonts?.ready.then(() => { labelW.clear(); labelKey = ''; dirty = true; });
   scene = new THREE.Scene();
   scene.fog = new THREE.Fog(MIST, 900, 2600);
   camera = new THREE.PerspectiveCamera(40, 1, 1, 5000);
@@ -159,8 +169,11 @@ function intro() {
 function resize() {
   if (!renderer) return;
   const w = host.clientWidth, h = host.clientHeight;
-  if (!w || !h) return; // map hidden (data/about pages): keep the framebuffer as is
-  cssH = h; renderer.setSize(w, h, false);
+  hidden = !w || !h;
+  if (hidden) return; // map hidden (data/about pages): keep the framebuffer, render nothing until shown
+  cssH = h; labelKey = ''; renderer.setSize(w, h, false);
+  labelCanvas.width = Math.round(w * devicePixelRatio); labelCanvas.height = Math.round(h * devicePixelRatio);
+  for (const m of lineMats) m.resolution.set(w, h);
   // On desktop the sheet floats over the right of the map: shift the projection centre so that
   // flights and the overview centre in the part of the map people can see.
   const pr0 = document.getElementById('panel')?.getBoundingClientRect(), hr = host.getBoundingClientRect();
@@ -191,10 +204,13 @@ function loop(now) {
   if (onFrame && onFrame(now)) dirty = true;
   const moved = controls.update();
   adapt(now, dirty || moved);
-  if (dirty || moved) {
+  if ((dirty || moved) && !hidden) {
     const dist = camera.position.distanceTo(controls.target);
     common.fogNear.value = scene.fog.near = dist * 1.1; common.fogFar.value = scene.fog.far = dist * 2.9;
+    const risen = common.rise.value > 0.999;
+    for (const o of netObjs) o.visible = risen && !!layers.network?.visible && dist < o.userData.maxDist && o.userData.minKm2 >= netMinKm2; // rivers appear once the relief has risen
     renderer.render(scene, camera); dirty = false;
+    drawLabels(dist);
     if (terrain && !firstFrame) { firstFrame = true; performance.mark('map-ready'); }
     const sc = Math.max(0.35, dist / 260); // pins and fronts keep roughly the same size on screen
     if (marker) marker.scale.setScalar(sc); if (fronts) fronts.forEach((f) => f.scale.setScalar(sc));
@@ -242,7 +258,87 @@ export function setPoints(name, items, colorOf, sizeOf = () => 9) {
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(p, 3)); g.setAttribute('color', new THREE.BufferAttribute(c, 3)); g.setAttribute('size', new THREE.BufferAttribute(s, 1));
   const obj = new THREE.Points(g, new THREE.ShaderMaterial({ uniforms: ptUni, vertexShader: ptVert, fragmentShader: ptFrag, transparent: true, depthTest: true }));
-  obj.renderOrder = 2; scene.add(obj); layers[name] = { obj, items, visible: true }; dirty = true;
+  obj.renderOrder = 2; scene.add(obj); layers[name] = { obj, items, pos: p, visible: true }; dirty = true;
+}
+
+// ---- river network: screen-space lines (main rivers thicker), pickable by their cells ----
+// polys: [{ pts: [[lon, lat], …], km2 }]; picking reports { poly, i, ll }.
+export function setRiverNetwork(polys) {
+  for (const o of netObjs) { scene.remove(o); o.geometry.dispose(); }
+  netObjs.length = 0;
+  const pick = [], items = [];
+  // smaller rivers only when zoomed in: at the national view they are sub-pixel clutter
+  for (const [minKm2, maxKm2, width, color, maxDist] of [[25, 250, 1, 0x4a95ad, 300], [250, 1000, 1.2, 0x3b8aa3, 520], [1000, 5000, 1.6, 0x2f7f9a, Infinity], [5000, Infinity, 2.6, 0x0a6787, Infinity]]) {
+    const seg = [];
+    polys.forEach((pl, pi) => {
+      if (pl.km2 < minKm2 || pl.km2 >= maxKm2) return;
+      const xyz = pl.pts.map((ll) => { const [x, z] = toXZ(...ll); return [x, heightAt(...ll) + 0.45, z]; });
+      for (let k = 1; k < xyz.length; k++) seg.push(...xyz[k - 1], ...xyz[k]);
+      xyz.forEach((v, i) => { pick.push(...v); items.push({ poly: pi, i, ll: pl.pts[i] }); });
+    });
+    const g = new LineSegmentsGeometry(); g.setPositions(seg);
+    const m = new LineMaterial({ color, linewidth: width, transparent: true, opacity: 0.95, depthTest: true });
+    m.resolution.set(host.clientWidth || 1, host.clientHeight || 1); lineMats.push(m);
+    const o = new LineSegments2(g, m); o.renderOrder = 1; o.visible = false; o.userData.maxDist = maxDist; o.userData.minKm2 = minKm2; scene.add(o); netObjs.push(o);
+  }
+  layers.network = { obj: netObjs[0], items, pos: new Float32Array(pick), visible: layers.network?.visible ?? true };
+  dirty = true;
+}
+
+// ---- traced river: thick line on a white halo, revealed downstream (setTraceProgress 0..1) ----
+let trace = null;
+export function setTrace(pts) {
+  clearTrace(); if (!scene || pts.length < 2) return;
+  const seg = []; let prev = null;
+  for (const ll of pts) { const [x, z] = toXZ(...ll), v = [x, heightAt(...ll) + 0.7, z]; if (prev) seg.push(...prev, ...v); prev = v; }
+  // scenario ink: yellow line with a thin black edge (no base-map layer uses it)
+  trace = [[7, 0x1b2a32, 1], [4.5, 0xffd60a, 1]].map(([w, c, o], k) => {
+    const g = new LineSegmentsGeometry(); g.setPositions(seg);
+    const m = new LineMaterial({ color: c, linewidth: w, transparent: true, opacity: o, depthTest: false });
+    m.resolution.set(host.clientWidth || 1, host.clientHeight || 1); lineMats.push(m);
+    const o2 = new LineSegments2(g, m); o2.renderOrder = 6 + k; scene.add(o2); return o2;
+  });
+  trace.n = seg.length / 6; setTraceProgress(0);
+}
+export function setTraceProgress(f) { if (!trace) return; const n = Math.max(1, Math.round(trace.n * f)); for (const o of trace) o.geometry.instanceCount = n; dirty = true; }
+export function clearTrace() { if (!trace) return; for (const o of trace) { scene.remove(o); o.geometry.dispose(); lineMats.splice(lineMats.indexOf(o.material), 1); o.material.dispose(); } trace = null; dirty = true; }
+
+// ---- place-name labels: ranked, shown by zoom, no overlaps (2D canvas over the WebGL view) ----
+// items: [{ ll, text, rank, pri }]  rank 0 = always shown … 4 = only when close; pri breaks ties (the capital first)
+const LABEL_MAX_DIST = [Infinity, 1400, 700, 330, 170];
+export function setLabels(items) {
+  labels = items.map((l) => { const [x, z] = toXZ(...l.ll); return { ...l, x, y: heightAt(...l.ll), z }; }).sort((a, b) => a.rank - b.rank || (b.pri || 0) - (a.pri || 0));
+  labelW.clear(); labelKey = ''; dirty = true;
+}
+const lv = new THREE.Vector3();
+function drawLabels(dist) {
+  // redraw only when the view, the labels or the relief changed (not on every animation frame)
+  const e = camera.matrixWorld.elements, key = `${e[12].toFixed(2)},${e[13].toFixed(2)},${e[14].toFixed(2)},${e[8].toFixed(4)},${e[10].toFixed(4)},${common.rise.value.toFixed(3)},${labels.length}`;
+  if (key === labelKey) return; labelKey = key;
+  const W = labelCanvas.width, H = labelCanvas.height, s = devicePixelRatio;
+  lctx.setTransform(1, 0, 0, 1, 0, 0); lctx.clearRect(0, 0, W, H);
+  if (!labels.length || common.rise.value < 0.999 || !host.clientWidth) { if (labelCanvas.dataset.drawn) labelCanvas.dataset.drawn = ''; return; }
+  lctx.setTransform(s, 0, 0, s, 0, 0);
+  const w = host.clientWidth - inset, h = host.clientHeight, boxes = [], drawn = [];
+  lctx.textBaseline = 'middle'; lctx.lineJoin = 'round';
+  for (const l of labels) {
+    if (dist > LABEL_MAX_DIST[l.rank] || drawn.length >= 90) continue;
+    lv.set(l.x, l.y, l.z).project(camera);
+    if (lv.z > 1) continue;
+    const px = ((lv.x + 1) / 2) * host.clientWidth, py = ((1 - lv.y) / 2) * h;
+    if (px < 0 || py < 0 || px > w || py > h) continue;
+    const font = l.rank === 0 ? '650 15px Anek, "Noto Sans Devanagari", system-ui, sans-serif' : l.rank === 1 ? '600 13.5px Anek, "Noto Sans Devanagari", system-ui, sans-serif' : l.rank === 2 ? '500 12.5px Anek, "Noto Sans Devanagari", system-ui, sans-serif' : '500 12px Anek, "Noto Sans Devanagari", system-ui, sans-serif';
+    lctx.font = font;
+    const key = font + l.text; let tw = labelW.get(key); if (tw == null) { tw = lctx.measureText(l.text).width; labelW.set(key, tw); }
+    const dot = l.rank !== 2, bx = px + (dot ? 6 : -tw / 2), by = py - 9, bw = tw + (dot ? 2 : 0), bh = 18;
+    if (boxes.some((b) => bx < b[0] + b[2] + 4 && bx + bw + 4 > b[0] && by < b[1] + b[3] && by + bh > b[1])) continue;
+    boxes.push([bx, by, bw, bh]); drawn.push(l.text);
+    lctx.lineWidth = 3.2; lctx.strokeStyle = 'rgba(247,249,247,.92)'; lctx.fillStyle = l.rank === 2 ? '#6b6556' : '#1b2a32';
+    if (dot) { lctx.beginPath(); lctx.arc(px, py, l.rank === 0 ? 3.2 : 2.5, 0, 7); lctx.fill(); lctx.lineWidth = 1.5; lctx.stroke(); lctx.lineWidth = 3.2; }
+    const tx = dot ? px + 7 : px - tw / 2;
+    lctx.strokeText(l.text, tx, py); lctx.fillText(l.text, tx, py);
+  }
+  const d = drawn.join('|'); if (labelCanvas.dataset.drawn !== d) labelCanvas.dataset.drawn = d;
 }
 export function showLayer(name, on) { if (layers[name]) { layers[name].obj.visible = on; layers[name].visible = on; dirty = true; } }
 
@@ -256,7 +352,7 @@ function pickHandlers(el) {
     let best = null, bd = 22;
     for (const [name, L] of Object.entries(layers)) {
       if (!L.visible) continue;
-      const a = L.obj.geometry.attributes.position.array;
+      const a = L.pos;
       for (let k = 0; k < L.items.length; k++) {
         v.set(a[3 * k], a[3 * k + 1], a[3 * k + 2]).project(camera);
         if (v.z > 1) continue;
@@ -282,42 +378,41 @@ export function setShaking(grid, a, b) {
 export const setShakeRadius = (km) => { uni.radius.value = km; dirty = true; };
 export const clearShaking = () => { uni.overlayOn.value = 0; dirty = true; };
 
-// ---- flood path: ribbon draped on terrain, coloured by arrival window ----
-let pathObj = null, marker = null;
-const pathUni = { uT: { value: -1 } };
-const pVert = `attribute vec2 arr; varying vec2 vArr; varying float vSide; attribute float side;
-void main(){ vArr = arr; vSide = side; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`;
-const pFrag = `uniform float uT; varying vec2 vArr; varying float vSide;
-void main(){
-  float edge = 1. - smoothstep(.6, 1., abs(vSide));
-  vec3 idle = vec3(.04,.40,.53), reached = vec3(.02,.33,.46), band = vec3(.73,.47,0.);
-  vec3 c = idle; float a = .5;
-  if (uT >= 0.) {
-    if (uT >= vArr.y) { c = reached; a = .95; }
-    else if (uT >= vArr.x) { float f = (uT - vArr.x) / max(vArr.y - vArr.x, 1e-3); c = mix(band, reached, f); a = .95; }
-    else { a = .22; }
-  }
-  gl_FragColor = vec4(c, a * (.35 + .65 * edge));
-}`;
+// ---- flood path: yellow line on a black edge (screen-space width), coloured by arrival window ----
+// Each vertex knows its earliest and latest arrival; setPathTime recolours: arrived = yellow,
+// between the two fronts = pale yellow, not yet reached = grey.
+let pathObj = null, pathArr = null, marker = null;
+const P_ARRIVED = [1, 0.84, 0.04], P_BAND = [1, 0.95, 0.62], P_IDLE = [0.74, 0.72, 0.62];
 export function setPath(pts) {
   clearPath();
-  if (!pts.length) return;
-  const n = pts.length, W = 1.1, pos = new Float32Array(n * 6), arr = new Float32Array(n * 4), side = new Float32Array(n * 2), idx = [];
-  const xz = pts.map((p) => toXZ(...p.ll));
-  for (let k = 0; k < n; k++) {
-    const a = xz[Math.max(0, k - 2)], b = xz[Math.min(n - 1, k + 2)], dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz) || 1, nxv = -dz / L, nzv = dx / L;
-    const y = heightAt(...pts[k].ll) + 0.35;
-    pos.set([xz[k][0] + nxv * W, y, xz[k][1] + nzv * W, xz[k][0] - nxv * W, y, xz[k][1] - nzv * W], 6 * k);
-    const t = pts[k].arrivalH || [0, 0]; arr.set([t[0], t[1], t[0], t[1]], 4 * k); side.set([1, -1], 2 * k);
-    if (k) { const p = 2 * (k - 1), q = 2 * k; idx.push(p, p + 1, q, q, p + 1, q + 1); }
+  if (pts.length < 2) return;
+  const seg = [], arr = [];
+  for (let k = 1; k < pts.length; k++) {
+    for (const q of [pts[k - 1], pts[k]]) { const [x, z] = toXZ(...q.ll); seg.push(x, heightAt(...q.ll) + 0.6, z); arr.push(q.arrivalH || [0, 0]); }
   }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('arr', new THREE.BufferAttribute(arr, 2)); g.setAttribute('side', new THREE.BufferAttribute(side, 1)); g.setIndex(idx);
-  pathObj = new THREE.Mesh(g, new THREE.ShaderMaterial({ uniforms: pathUni, vertexShader: pVert, fragmentShader: pFrag, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
-  pathObj.renderOrder = 3; scene.add(pathObj); dirty = true;
+  pathArr = arr;
+  pathObj = [[7, false], [4.2, true]].map(([w, colored], k) => {
+    const g = new LineSegmentsGeometry(); g.setPositions(seg);
+    if (colored) g.setColors(new Float32Array(seg.length).fill(0.8));
+    const m = new LineMaterial({ color: colored ? 0xffffff : 0x1b2a32, linewidth: w, vertexColors: colored, depthTest: false });
+    m.resolution.set(host.clientWidth || 1, host.clientHeight || 1); lineMats.push(m);
+    const o = new LineSegments2(g, m); o.renderOrder = 3 + k; scene.add(o); return o;
+  });
+  setPathTime(-1);
 }
-export const setPathTime = (h) => { pathUni.uT.value = h; dirty = true; };
-export function clearPath() { if (pathObj) { scene.remove(pathObj); pathObj.geometry.dispose(); pathObj = null; } pathUni.uT.value = -1; if (fronts) hideFronts(); dirty = true; }
+export function setPathTime(h) {
+  if (!pathObj) return;
+  const buf = pathObj[1].geometry.attributes.instanceColorStart.data, a = buf.array;
+  pathArr.forEach(([e, l], v) => {
+    const c = h < 0 ? P_ARRIVED : h >= l ? P_ARRIVED : h >= e ? P_BAND : P_IDLE;
+    a.set(c, v * 3);
+  });
+  buf.needsUpdate = true; dirty = true;
+}
+export function clearPath() {
+  if (pathObj) for (const o of pathObj) { scene.remove(o); o.geometry.dispose(); lineMats.splice(lineMats.indexOf(o.material), 1); o.material.dispose(); }
+  pathObj = null; pathArr = null; if (fronts) hideFronts(); dirty = true;
+}
 
 // single highlighted location (search result / epicentre / lake): a slim survey pin
 export function setMarker(ll, color = '#1B2A32') {
@@ -342,9 +437,12 @@ let fronts = null;
 export function setFronts(early, late) {
   if (!scene) return;
   if (!fronts) {
-    fronts = [0x0a6787, 0xb97800].map((c) => {
-      const m = new THREE.Mesh(new THREE.RingGeometry(2.2, 3.4, 40), new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.95, side: THREE.DoubleSide, depthTest: false }));
-      m.rotation.x = -Math.PI / 2; m.renderOrder = 5; scene.add(m); return m;
+    // earliest front: yellow ring outlined in black; latest front: black ring outlined in yellow
+    fronts = [[0xffd60a, 0x1b2a32], [0x1b2a32, 0xffd60a]].map(([fill, line]) => {
+      const g = new THREE.Group(), mat = (c) => new THREE.MeshBasicMaterial({ color: c, side: THREE.DoubleSide, depthTest: false });
+      const outer = new THREE.Mesh(new THREE.RingGeometry(1.9, 3.7, 40), mat(line)), inner = new THREE.Mesh(new THREE.RingGeometry(2.25, 3.35, 40), mat(fill));
+      outer.renderOrder = 5; inner.renderOrder = 6; inner.position.y = 0.01; g.add(outer, inner);
+      g.rotation.x = -Math.PI / 2; scene.add(g); return g;
     });
   }
   [early, late].forEach((ll, k) => { const f = fronts[k]; f.visible = !!ll; if (ll) { const [x, z] = toXZ(...ll); f.position.set(x, heightAt(...ll) + 0.5, z); } });

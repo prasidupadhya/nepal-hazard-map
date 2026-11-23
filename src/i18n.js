@@ -12,8 +12,22 @@ export const T = {
     key: 'Map key', north: 'Turn map to north', source: 'Source', trendL: 'Trend', status2: 'Status',
     nav: { map: 'Map', data: 'Latest data', glof: 'Lake burst', quake: 'Earthquake', about: 'About' },
     search: 'Search a place, district, river station or lake', noResults: 'No matching place',
-    kinds: { d: 'District', m: 'Local level', s: 'River station', l: 'Glacial lake' },
-    layers: { rivers: 'River levels', rain: 'Rainfall', quakes: 'Earthquakes', incidents: 'Floods' },
+    kinds: { d: 'District', m: 'Local level', s: 'River gauge', l: 'Glacial lake' },
+    layers: { network: 'Rivers', lakes: 'Dangerous glacial lakes', rivers: 'River gauges', rain: 'Rainfall', quakes: 'Earthquakes', incidents: 'Flood reports' },
+    river: {
+      tap: 'Tap a river, or anywhere on the land, to follow the water downstream.', traceBtn: 'Trace downstream from this gauge', unnamed: 'River', becomes: 'Named along the way',
+      length: 'Followed for', drop: 'Height', from: 'from', to: 'to', gauges: 'River gauges downstream', noGauges: 'No river gauge on this stretch.',
+      lakesUp: 'Dangerous glacial lakes upstream', lakesNote: 'An outburst from any of these lakes would flow past this point.', noLakes: 'No dangerous glacial lake drains through this point.',
+      near: 'Passes near', ends: 'River directions: HydroSHEDS (Lehner et al. 2008), conditioned with mapped river lines so they hold across the flat Terai. The trace runs to the edge of this map.',
+    },
+    lake: {
+      rank: 'Danger rank', area: 'Water area', rankI: 'I, highest', rankII: 'II', rankIII: 'III', basin: 'River', country: 'Located in', id: 'ICIMOD lake ID',
+      volSurvey: 'Surveyed volume (ICIMOD, 2009)', volArea: 'Volume estimated from lake area', volNone: 'No published volume for this lake. Enter a range you think likely.',
+      scenario: 'Run a burst scenario for this lake', pickLake: 'Tap one of the lake circles on the map.', source: 'Lakes: ICIMOD (2020) potentially dangerous glacial lakes whose floods would reach Nepal.',
+      needVol: 'Enter how much water the lake could release.',
+      bigNote: 'This lake is larger than most of the lakes the formula was built from, so the estimate is less certain.',
+      frozenNote: 'This lake was frozen in every clear satellite image, so its area was traced on the ice and part of it is missing. The real volume is probably larger: consider raising the upper value.',
+    },
     sources: 'Data sources', copied: 'copied', newest: 'newest reading', ago: 'ago', fresh: 'up to date', stale: 'old', failed: 'last copy failed — showing previous copy',
     origin: { 'DHM via BIPAD': 'DHM via BIPAD', 'NEMRC via BIPAD': 'NEMRC via BIPAD', BIPAD: 'BIPAD' },
     feeds: { rivers: 'River levels', rain: 'Rainfall', quakes: 'Earthquakes', incidents: 'Flood & GLOF reports' },
@@ -24,13 +38,21 @@ export const T = {
     level: 'Level', warn: 'Warning', danger: 'Danger', m: 'm', mm: 'mm', rain1: 'Last 1 h', rain24: 'Last 24 h',
     mag: 'Magnitude', loadOlder: 'Load older', noOlder: 'No older records', loading: 'Loading…', hazard: { 11: 'Flood', 26: 'Glacial lake outburst', 28: 'Inundation', 8: 'Earthquake' },
     loss: 'Loss record', verified: 'verified', filter: 'Filter by name',
+    glance: {
+      h: 'Today at a glance', rivers: 'Rivers', rain: 'Rain', quakes: 'Earthquakes', incidents: 'Flood reports',
+      allBelow: (n) => `All ${n} river gauges are below warning level.`, someAbove: (n) => `${n} river gauge${n > 1 ? 's are' : ' is'} at warning or danger level:`,
+      wettest: (mm, at) => `Most rain in the last 24 hours: ${mm} mm at ${at}.`, dry: (n, all) => `${n} of ${all} stations recorded no rain.`, noRain: 'No station recorded rain in the last 24 hours.',
+      lastQuake: (m, at, ago) => `Latest on record: magnitude ${m}, ${at}, ${ago}.`, lastReport: (ago, n) => `Latest report ${ago}. ${n} in the last 30 days.`,
+      updated: (ago, src) => `Newest record ${ago}, from ${src}.`, reports: (n) => `${n} reports`, alerts: 'At warning or danger level', gauges: (n) => `${n} gauges`, noRainList: (n) => `${n} stations with no rain`,
+      ofWarn: 'warning', ofDanger: 'danger', noLevels: 'No warning level published', other: 'Other basins', basinsNote: 'Grouped by river basin. Open a basin to see its gauges.',
+    },
     glof: {
-      h: 'What if a glacial lake bursts?', lead: 'Choose a lake, or tap the map, then set how much water it could release.',
-      lake: 'Lake', custom: 'Point on map', volume: 'Water released (million m³)', from: 'from', to: 'to',
+      h: 'What if a glacial lake bursts?', lead: 'Choose one of the 47 potentially dangerous glacial lakes whose floods would reach Nepal, then set how much water it could release.',
+      lake: 'Lake', volume: 'Water released (million m³)', from: 'from', to: 'to',
       run: 'Run scenario', play: 'Play', pause: 'Pause', time: 'Hours after burst',
       result: 'Result', place: 'Place on the path', dist: 'Distance', arrival: 'Arrival (earliest – latest)', peak: 'Peak flow (m³/s)', depth: 'Water depth (m)',
       ends: 'The path ends where the river reaches the plains (below 120 m). There, water spreads out and this model cannot say where it goes.',
-      tap: 'Tap the map to choose a starting point.',
+      tap: 'Or tap a lake circle on the map.',
     },
     quake: {
       h: 'What if a big earthquake hits?', lead: 'Choose where it starts and how strong it is. Colours show the likely shaking band.',
@@ -55,7 +77,21 @@ export const T = {
     nav: { map: 'नक्सा', data: 'ताजा तथ्यांक', glof: 'हिमताल विस्फोट', quake: 'भूकम्प', about: 'बारेमा' },
     search: 'ठाउँ, जिल्ला, नदी केन्द्र वा हिमताल खोज्नुहोस्', noResults: 'मिल्ने ठाउँ भेटिएन',
     kinds: { d: 'जिल्ला', m: 'स्थानीय तह', s: 'नदी मापन केन्द्र', l: 'हिमताल' },
-    layers: { rivers: 'नदीको सतह', rain: 'वर्षा', quakes: 'भूकम्प', incidents: 'बाढी' },
+    layers: { network: 'नदी', lakes: 'खतरनाक हिमताल', rivers: 'नदी मापन केन्द्र', rain: 'वर्षा', quakes: 'भूकम्प', incidents: 'बाढी घटना' },
+    river: {
+      tap: 'पानी तल्लो भागतर्फ कहाँ जान्छ हेर्न नदी वा जमिनको कुनै पनि ठाउँमा थिच्नुहोस्।', traceBtn: 'यो केन्द्रबाट तल्लो भागतर्फ पछ्याउनुहोस्', unnamed: 'नदी', becomes: 'बाटोमा पर्ने नाम',
+      length: 'पछ्याइएको दूरी', drop: 'उचाइ', from: 'देखि', to: 'सम्म', gauges: 'तल्लो भागका नदी मापन केन्द्र', noGauges: 'यो खण्डमा नदी मापन केन्द्र छैन।',
+      lakesUp: 'माथिल्लो भागका खतरनाक हिमताल', lakesNote: 'यीमध्ये कुनै हिमताल फुटेमा बाढी यही बिन्दु भएर बग्छ।', noLakes: 'यो बिन्दु भएर कुनै खतरनाक हिमतालको पानी बग्दैन।',
+      near: 'नजिकैबाट जान्छ', ends: 'नदीको दिशा: HydroSHEDS (Lehner र अन्य, २००८), नक्सांकित नदी रेखासँग मिलाइएको, त्यसैले समथर तराईमा पनि भरपर्दो। नक्साको किनारासम्म पछ्याइन्छ।',
+    },
+    lake: {
+      rank: 'खतराको श्रेणी', area: 'पानीको क्षेत्रफल', rankI: 'I, सबैभन्दा उच्च', rankII: 'II', rankIII: 'III', basin: 'नदी', country: 'अवस्थिति', id: 'ICIMOD हिमताल परिचय',
+      volSurvey: 'सर्वेक्षण गरिएको आयतन (ICIMOD, २००९)', volArea: 'क्षेत्रफलबाट अनुमान गरिएको आयतन', volNone: 'यो हिमतालको प्रकाशित आयतन छैन। सम्भावित दायरा राख्नुहोस्।',
+      scenario: 'यो हिमताल फुटेको परिदृश्य चलाउनुहोस्', pickLake: 'नक्सामा कुनै हिमतालको गोलो थिच्नुहोस्।', source: 'हिमताल: नेपालमा बाढी पुर्‍याउन सक्ने ICIMOD (२०२०) का सम्भावित खतरनाक हिमताल।',
+      needVol: 'हिमतालबाट कति पानी निस्कन सक्छ राख्नुहोस्।',
+      bigNote: 'यो हिमताल सूत्र बनाउन प्रयोग भएका धेरैजसो हिमतालभन्दा ठूलो छ, त्यसैले अनुमान कम निश्चित छ।',
+      frozenNote: 'हरेक सफा स्याटेलाइट तस्बिरमा यो हिमताल जमेको थियो, त्यसैले बरफमा क्षेत्रफल नापिएको छ र केही भाग छुटेको छ। वास्तविक आयतन सम्भवतः बढी छ: माथिल्लो मान बढाउने विचार गर्नुहोस्।',
+    },
     sources: 'तथ्यांक स्रोत', copied: 'प्रतिलिपि', newest: 'पछिल्लो मापन', ago: 'अघि', fresh: 'अद्यावधिक', stale: 'पुरानो', failed: 'पछिल्लो प्रतिलिपि असफल — अघिल्लो प्रतिलिपि देखाइँदै',
     origin: { 'DHM via BIPAD': 'जल तथा मौसम विज्ञान विभाग (बिपद पोर्टल मार्फत)', 'NEMRC via BIPAD': 'राष्ट्रिय भूकम्प मापन केन्द्र (बिपद पोर्टल मार्फत)', BIPAD: 'बिपद पोर्टल' },
     feeds: { rivers: 'नदीको सतह', rain: 'वर्षा', quakes: 'भूकम्प', incidents: 'बाढी र हिमताल विस्फोट घटना' },
@@ -66,13 +102,21 @@ export const T = {
     level: 'सतह', warn: 'चेतावनी', danger: 'खतरा', m: 'मि.', mm: 'मि.मि.', rain1: 'पछिल्लो १ घण्टा', rain24: 'पछिल्लो २४ घण्टा',
     mag: 'म्याग्निच्युड', loadOlder: 'पुराना हेर्नुहोस्', noOlder: 'थप पुराना अभिलेख छैनन्', loading: 'लोड हुँदैछ…', hazard: { 11: 'बाढी', 26: 'हिमताल विस्फोटन', 28: 'डुबान', 8: 'भूकम्प' },
     loss: 'क्षति अभिलेख', verified: 'प्रमाणित', filter: 'नामबाट छान्नुहोस्',
+    glance: {
+      h: 'आजको संक्षेप', rivers: 'नदी', rain: 'वर्षा', quakes: 'भूकम्प', incidents: 'बाढी घटना',
+      allBelow: (n) => `सबै ${n} नदी मापन केन्द्र चेतावनी तहभन्दा तल छन्।`, someAbove: (n) => `${n} नदी मापन केन्द्र चेतावनी वा खतरा तहमा छन्:`,
+      wettest: (mm, at) => `पछिल्लो २४ घण्टामा सबैभन्दा बढी वर्षा: ${at} मा ${mm} मि.मि.।`, dry: (n, all) => `${all} मध्ये ${n} केन्द्रमा वर्षा भएन।`, noRain: 'पछिल्लो २४ घण्टामा कुनै केन्द्रमा वर्षा भएन।',
+      lastQuake: (m, at, ago) => `पछिल्लो अभिलेख: म्याग्निच्युड ${m}, ${at}, ${ago}।`, lastReport: (ago, n) => `पछिल्लो घटना ${ago}। पछिल्लो ३० दिनमा ${n} वटा।`,
+      updated: (ago, src) => `पछिल्लो अभिलेख ${ago}, स्रोत: ${src}।`, reports: (n) => `${n} वटा सूचना`, alerts: 'चेतावनी वा खतरा तहमा', gauges: (n) => `${n} केन्द्र`, noRainList: (n) => `वर्षा नभएका ${n} केन्द्र`,
+      ofWarn: 'चेतावनी', ofDanger: 'खतरा', noLevels: 'चेतावनी तह प्रकाशित छैन', other: 'अन्य नदी बेसिन', basinsNote: 'नदी बेसिनअनुसार समूह। केन्द्रहरू हेर्न बेसिन खोल्नुहोस्।',
+    },
     glof: {
-      h: 'हिमताल फुटे के हुन्छ?', lead: 'हिमताल छान्नुहोस् वा नक्सामा थिच्नुहोस्, अनि कति पानी निस्कन सक्छ राख्नुहोस्।',
-      lake: 'हिमताल', custom: 'नक्साको बिन्दु', volume: 'निस्कने पानी (दस लाख घन मिटर)', from: 'देखि', to: 'सम्म',
+      h: 'हिमताल फुटे के हुन्छ?', lead: 'नेपालमा बाढी पुर्‍याउन सक्ने ४७ सम्भावित खतरनाक हिमतालमध्ये एउटा छान्नुहोस्, अनि कति पानी निस्कन सक्छ राख्नुहोस्।',
+      lake: 'हिमताल', volume: 'निस्कने पानी (दस लाख घन मिटर)', from: 'देखि', to: 'सम्म',
       run: 'परिदृश्य चलाउनुहोस्', play: 'चलाउनुहोस्', pause: 'रोक्नुहोस्', time: 'फुटेपछिको घण्टा',
       result: 'नतिजा', place: 'बाटोको ठाउँ', dist: 'दूरी', arrival: 'आइपुग्ने समय (छिटो – ढिलो)', peak: 'उच्चतम बहाव (घन मि./से.)', depth: 'पानीको गहिराइ (मि.)',
       ends: 'नदी समथर भूभाग (१२० मिटरभन्दा तल) पुगेपछि बाटो रोकिन्छ। त्यहाँ पानी फैलिन्छ र यो मोडेलले दिशा भन्न सक्दैन।',
-      tap: 'सुरु बिन्दु छान्न नक्सामा थिच्नुहोस्।',
+      tap: 'वा नक्सामा हिमतालको गोलो थिच्नुहोस्।',
     },
     quake: {
       h: 'ठूलो भूकम्प गए के हुन्छ?', lead: 'केन्द्र र शक्ति छान्नुहोस्। रङले सम्भावित कम्पनको दायरा देखाउँछ।',
@@ -87,6 +131,8 @@ export const T = {
 };
 export let lang = 'en';
 export const setLang = (l) => { lang = l; document.documentElement.lang = l === 'ne' ? 'ne' : 'en'; };
+// strings may be functions: tf('glance.dry', n, all)
+export const tf = (path, ...a) => { const v = t(path); return typeof v === 'function' ? v(...a) : v; };
 export const t = (path) => path.split('.').reduce((o, k) => (o == null ? o : o[k]), T[lang]) ?? path.split('.').reduce((o, k) => (o == null ? o : o[k]), T.en) ?? path;
 // Own Nepali formatting: many phone browsers ship without Nepali locale data.
 const DEV = '०१२३४५६७८९';
@@ -100,5 +146,8 @@ export const when = (iso) => {
   const hm = `${String(n.getUTCHours()).padStart(2, '0')}:${String(n.getUTCMinutes()).padStart(2, '0')}`;
   return lang === 'ne' ? digits(`${n.getUTCFullYear()} ${MON.ne[n.getUTCMonth()]} ${n.getUTCDate()}, ${hm}`) + ' (नेपाली समय)' : `${n.getUTCDate()} ${MON.en[n.getUTCMonth()]} ${n.getUTCFullYear()}, ${hm} NPT`;
 };
+// date only (for records that carry no time of day)
+export const day = (iso) => { const n = new Date(Date.parse(iso) + 345 * 60000); return lang === 'ne' ? digits(`${n.getUTCFullYear()} ${MON.ne[n.getUTCMonth()]} ${n.getUTCDate()}`) : `${n.getUTCDate()} ${MON.en[n.getUTCMonth()]} ${n.getUTCFullYear()}`; };
+export const monthYear = (iso) => { const n = new Date(Date.parse(iso) + 345 * 60000); return lang === 'ne' ? digits(`${MON.ne[n.getUTCMonth()]} ${n.getUTCFullYear()}`) : `${['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][n.getUTCMonth()]} ${n.getUTCFullYear()}`; };
 export const age = (iso, now = Date.now()) => { if (!iso) return '–'; const [n, u] = ageParts(iso, now); return `${num(n)} ${t('unit.' + u)} ${t('ago')}`; };
 export const name = (o) => (lang === 'ne' && o.ne ? o.ne : o.en);

@@ -30,10 +30,33 @@ const ctx = await browser.newContext({ viewport: { width: 390, height: 800 } });
 await page.goto(BASE + '#/'); await page.waitForSelector('#panel .feeds', { timeout: 30000 });
 await page.fill('#q', 'pokh'); const first = await page.textContent('#results li'); ok(/Pokhara/.test(first), `search "pokh" → ${first}`);
 await page.fill('#q', 'काठमाडौं'); const ne = await page.textContent('#results li'); ok(/Kathmandu/.test(ne), `Nepali search → ${ne}`);
-// tapping the map picks real ground (projection is offset beside the sheet on desktop)
+// map: rivers only by default, labels drawn in both languages, tapping a river traces it downstream
+for (const [lang, want] of [['en', 'Kathmandu'], ['ne', 'काठमाडौ']]) {
+  const d = await browser.newPage({ viewport: { width: 1280, height: 800 } }); await d.addInitScript((l) => localStorage.setItem('lang', l), lang);
+  await d.goto(BASE + '#/'); await d.waitForFunction(() => document.querySelector('canvas.labels')?.dataset.drawn, null, { timeout: 40000 });
+  const drawn = await d.$eval('canvas.labels', (c) => c.dataset.drawn);
+  ok(drawn.includes(want), `[${lang}] map labels include ${want}`);
+  if (lang === 'en') {
+    const on = await d.$$eval('#chips [aria-pressed="true"]', (b) => b.map((x) => x.dataset.l));
+    ok(on.length === 1 && on[0] === 'network', `only the river layer is on by default (${on})`);
+    await d.waitForTimeout(1500); let traced = false;
+    for (const [x, y] of [[520, 470], [600, 430], [450, 520], [700, 420], [380, 560], [640, 500]]) { await d.mouse.click(x, y); await d.waitForTimeout(800); if (await d.$('#sel .callout h3')) { traced = true; break; } }
+    await d.waitForTimeout(1500);
+    const txt = traced ? await d.$eval('#sel', (e) => e.innerText) : '';
+    ok(traced && /Followed for/.test(txt) && /Dangerous glacial lakes upstream/.test(txt), 'tapping the map opens a downstream trace');
+  }
+  await d.close();
+}
+// lake burst: 47 ICIMOD lakes; tapping bare ground does not create a lake; unknown volume asks for one
 { const d = await browser.newPage({ viewport: { width: 1280, height: 800 } }); await d.goto(BASE + '#/glof'); await d.waitForFunction(() => performance.getEntriesByName('map-ready').length); await d.waitForTimeout(2500);
-  await d.mouse.click(300, 450); await d.waitForTimeout(300);
-  const v = await d.$eval('#lake', (s) => s.value); ok(v === 'custom', `desktop map tap sets a custom start point (${v})`); await d.close(); }
+  ok((await d.$$eval('#lake option', (o) => o.length)) === 47, '47 lakes to choose from');
+  const before = await d.$eval('#lake', (s) => s.value); await d.mouse.click(300, 450); await d.waitForTimeout(300);
+  ok((await d.$eval('#lake', (s) => s.value)) === before && /lake circles/.test(await d.$eval('#hint', (h) => h.textContent)), 'a tap on bare ground keeps the lake and shows a hint');
+  await d.selectOption('#lake', 'GL087945E27781N'); // unsurveyed lake: volume estimated from its satellite-measured area
+  ok(+(await d.$eval('#v0', (i) => i.value)) > 0 && /satellite/.test(await d.$eval('#volnote', (n) => n.textContent)), 'an unsurveyed lake comes with a volume range from its measured area');
+  await d.fill('#v0', ''); await d.fill('#v1', ''); await d.click('#run');
+  ok(/Enter how much water/.test(await d.$eval('#volnote', (n) => n.textContent)), 'running with the volume cleared asks for one');
+  await d.close(); }
 await page.goto(BASE + '#/glof'); await page.waitForSelector('#run'); await page.click('#run');
 await page.waitForSelector('#out table tbody tr', { timeout: 30000 });
 const rows = await page.$$eval('#out tbody tr', (t) => t.map((r) => r.innerText));
@@ -53,7 +76,7 @@ for (const tab of ['incidents', 'quakes']) {
   await page.goto(BASE + '#/data/' + tab); await page.waitForSelector('#rows li');
   while (await page.$('#more button')) { await page.click('#more button'); await page.waitForFunction(() => document.querySelector('#more button') || /No older/.test(document.querySelector('#more').textContent)); }
   const want = await page.evaluate(async (tab) => { const ix = await (await fetch('data/archive/index.json')).json(); const ids = new Set(); for (const m of Object.keys(ix.months)) for (const x of (await (await fetch('data/archive/' + m + '.json')).json())[tab]) ids.add(x.id); return ids.size; }, tab);
-  const got = await page.$$eval('#rows li', (l) => l.length);
+  const got = await page.$$eval('#rows li', (l) => l.reduce((n, x) => n + (+x.dataset.n || 1), 0)); // merged duplicate reports count each record
   ok(got === want, `all archived ${tab} reachable via Load older (${got}/${want})`);
 }
 await browser.close();

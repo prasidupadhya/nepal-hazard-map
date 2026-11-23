@@ -1,0 +1,61 @@
+{
+ "label": "19-river-lod",
+ "runs": 5,
+ "startup": {
+  "fcp": 492,
+  "content": 892,
+  "map": 3082,
+  "tbt": 373,
+  "kb": 446,
+  "jsKb": 159
+ },
+ "screens": {
+  "data": 267,
+  "glof": 36,
+  "quake": 224,
+  "about": 9,
+  "map": 8
+ },
+ "content": {
+  "GLOF result (cold route grid)": 2178,
+  "quake first shaking": 36,
+  "quake slider step": 233,
+  "data list open (rain)": 16,
+  "data list open (incidents)": 179,
+  "load older #1": 280,
+  "rows after older #1": 271,
+  "load older #2": 291,
+  "rows after older #2": 309,
+  "load older #3": 293,
+  "rows after older #3": 329
+ },
+ "scroll": {
+  "rain": {
+   "p50": 16.7,
+   "p95": 16.7,
+   "jank": 0
+  },
+  "incidents": {
+   "p50": 16.7,
+   "p95": 16.7,
+   "jank": 0
+  }
+ },
+ "frames": {
+  "map drag": {
+   "p50": 300,
+   "p95": 366.7,
+   "jank": 87.2
+  },
+  "GLOF animation": {
+   "p50": 200,
+   "p95": 233.4,
+   "jank": 92.8
+  },
+  "quake animation": {
+   "p50": 150,
+   "p95": 183.4,
+   "jank": 94.4
+  }
+ }
+}

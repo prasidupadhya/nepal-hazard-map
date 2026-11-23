@@ -9,7 +9,7 @@ import { VIEW } from '../src/grid.js';
 it('WASM matches the JS oracle', async () => {
   const w = await loadWasm(fs.readFileSync('public/wasm/scenario.wasm')), route = await loadRoute();
   w.setRoute(route);
-  for (const l of [...LAKES, { ll: [85.5, 28.3], vol: [5, 20] }]) {
+  for (const l of [...LAKES.map((x) => ({ ...x, vol: x.vol || [5, 20] })), { ll: [85.5, 28.3], vol: [5, 20] }]) {
     const a = glof(tracePath(route, ...l.ll), l.vol), b = w.glof(...l.ll, l.vol);
     expect(b.length).toBe(a.length);
     for (let k = 0; k < a.length; k += 7) for (const f of ['arrivalH', 'peak', 'depth', 'll']) for (const q of [0, 1]) expect(b[k][f][q]).toBeCloseTo(a[k][f][q], 6);
