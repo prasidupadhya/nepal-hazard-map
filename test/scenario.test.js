@@ -3,26 +3,36 @@ import { loadRoute } from './load-route.js';
 import { tracePath, glof, shakingAt, shakingGrid, mmiAW07, ruptureKm, peakEvans, peakHuggel, faultDistKm } from '../src/scenario.js';
 import { LAKES } from '../src/lakes.js';
 import { VIEW } from '../src/grid.js';
+import fs from 'node:fs';
+import { feature } from 'topojson-client';
+const topo = JSON.parse(fs.readFileSync('node_modules/world-atlas/countries-10m.json'));
+const gN = feature(topo, topo.objects.countries).features.find((f) => f.properties.name === 'Nepal').geometry;
+const ring = gN.type === 'Polygon' ? gN.coordinates[0] : gN.coordinates.flat()[0];
+// km from a point to the Nepal border line
+const toBorderKm = ([x, y]) => Math.min(...ring.slice(1).map(([bx, by], k) => { const [ax, ay] = ring[k], kx = 98, ky = 111.32;
+  const dx = (bx - ax) * kx, dy = (by - ay) * ky, px = (x - ax) * kx, py = (y - ay) * ky, t = Math.max(0, Math.min(1, (px * dx + py * dy) / (dx * dx + dy * dy || 1)));
+  return Math.hypot(px - t * dx, py - t * dy); }));
 
 let route; beforeAll(async () => { route = await loadRoute(); });
 const passesNear = (path, lon, lat, km) => path.some((p) => Math.hypot((p.ll[0] - lon) * 98, (p.ll[1] - lat) * 111) < km);
 
 describe('flow routing follows real rivers (known answers)', () => {
-  it('Imja → Dudh Koshi past Lukla → Koshi out of Nepal', () => {
+  it('Imja → Dudh Koshi past Lukla → Koshi past Chatara → ends at the border', () => {
     const p = tracePath(route, ...LAKES.find((l) => l.en === 'Imja Tsho').ll);
     expect(passesNear(p, 86.71, 27.69, 3)).toBe(true);      // Phakding/Lukla reach
-    expect(Math.hypot((p.at(-1).ll[0] - 87.16) * 98, (p.at(-1).ll[1] - 26.82) * 111)).toBeLessThan(5); // stops at Chatara (plains)
+    expect(passesNear(p, 87.16, 26.82, 4)).toBe(true);      // Chatara, where the Koshi leaves the hills
+    expect(toBorderKm(p.at(-1).ll)).toBeLessThan(2); expect(p.at(-1).ll[1]).toBeLessThan(26.6); // southern border, below the barrage
   });
-  it('Thulagi → Marsyangdi (Besisahar) → Narayani', () => {
+  it('Thulagi → Marsyangdi (Besisahar) → Narayani (Narayanghat) → ends at the border', () => {
     const p = tracePath(route, ...LAKES.find((l) => l.en === 'Thulagi').ll);
     expect(passesNear(p, 84.41, 28.23, 3)).toBe(true);
     expect(passesNear(p, 84.43, 27.69, 3)).toBe(true);      // Narayani at Narayanghat
-    expect(Math.hypot((p.at(-1).ll[0] - 83.93) * 98, (p.at(-1).ll[1] - 27.45) * 111)).toBeLessThan(5); // stops at Tribeni
+    expect(toBorderKm(p.at(-1).ll)).toBeLessThan(2); expect(Math.hypot((p.at(-1).ll[0] - 83.93) * 98, (p.at(-1).ll[1] - 27.45) * 111)).toBeLessThan(12); // Tribeni, where the Narayani leaves Nepal
   });
-  it('paths only go downhill overall and are monotonic in distance', () => {
+  it('every lake path goes downhill, is monotonic, and ends at the Nepal border', () => {
     for (const l of LAKES) {
       const p = tracePath(route, ...l.ll);
-      expect(p.at(-1).z).toBeLessThan(120); expect(p[0].z).toBeGreaterThan(3500);
+      expect(toBorderKm(p.at(-1).ll), l.id).toBeLessThan(2); expect(p[0].z).toBeGreaterThan(3500); expect(p.at(-1).z).toBeLessThan(p[0].z - 3000);
       for (let k = 1; k < p.length; k++) expect(p[k].km).toBeGreaterThan(p[k - 1].km);
     }
   });

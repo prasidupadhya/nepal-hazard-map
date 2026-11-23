@@ -4,7 +4,8 @@ const W: f64 = 79.9; const N: f64 = 30.5;
 const RSTEP: f64 = 1.0 / 240.0; const RNX: i32 = 2016; const RNY: i32 = 1020; // HydroSHEDS 15″ grid (see src/grid.js)
 const KM_LAT: f64 = 111.32;
 const D8: [(i32, i32); 8] = [(1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1), (0, -1), (1, -1)];
-const PLAINS_M: i16 = 120;
+// see src/scenario.js: NEPAL_BIT marks cells inside Nepal; a path ends BORDER_TOL cells after leaving Nepal, trimmed to the border
+const NEPAL_BIT: u8 = 16; const NEAR_BIT: u8 = 32; const BORDER_TOL: i32 = 6;
 
 #[inline] fn km_lon(lat: f64) -> f64 { 111.32 * libm::cos(lat * core::f64::consts::PI / 180.0) }
 #[inline] fn sqrt(x: f64) -> f64 { x.sqrt() } // std: native f64.sqrt instruction (libm's is software)
@@ -55,15 +56,18 @@ pub extern "C" fn glof(dir: *const u8, elev: *const i16, lon: f64, lat: f64, vlo
     let o = unsafe { core::slice::from_raw_parts_mut(out, (max * 10) as usize) };
     // trace
     let (mut i, mut j) = (libm::floor((lon - W) / RSTEP) as i32, libm::floor((N - lat) / RSTEP) as i32);
-    let mut cnt = 0i32; let mut km = 0.0;
+    let mut cnt = 0i32; let mut km = 0.0; let mut entered = false; let mut outside = 0i32; let mut inside: Vec<bool> = Vec::new();
     while cnt < max && i >= 0 && j >= 0 && i < RNX && j < RNY {
         let k = (j * RNX + i) as usize;
         let lo = W + (i as f64 + 0.5) * RSTEP; let la = N - (j as f64 + 0.5) * RSTEP;
         if cnt > 0 { let p = ((cnt - 1) * 10) as usize; km += hyp((lo - o[p]) * km_lon(la), (la - o[p + 1]) * KM_LAT); }
         let p = (cnt * 10) as usize; o[p] = lo; o[p + 1] = la; o[p + 2] = km; o[p + 3] = elev[k] as f64; cnt += 1;
-        let d = dir[k]; if d == 0 || elev[k] < PLAINS_M { break; }
+        let ins = dir[k] & NEPAL_BIT != 0; inside.push(ins);
+        if ins { entered = true; outside = 0; } else { if entered { outside += 1; if outside > BORDER_TOL { break; } } if dir[k] & NEAR_BIT == 0 && elev[k] < 400 { break; } }
+        let d = dir[k] & 15; if d == 0 { break; }
         i += D8[(d - 1) as usize].0; j += D8[(d - 1) as usize].1;
     }
+    if entered { while cnt > 1 && !inside[(cnt - 1) as usize] { cnt -= 1; } }
     // hydraulics
     // lowest and highest of both formulas (they cross near 1.3 million m³)
     let ev = |v: f64| 0.72 * libm::pow(v * 1e6, 0.53); let hu = |v: f64| 0.00077 * libm::pow(v * 1e6, 1.017);

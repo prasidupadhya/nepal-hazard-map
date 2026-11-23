@@ -62,8 +62,18 @@ for (let k = 0; k < N; k++) if (!indeg[k]) order.push(k);
 for (let h = 0; h < order.length; h++) { const k = order[h], d = down[k]; if (d >= 0) { acc[d] += acc[k]; if (--indeg[d] === 0) order.push(d); } }
 if (order.length !== N) throw new Error('flow directions contain a cycle');
 // route.png: R,G = raw elevation (m), B = D8 code. Raw (not filled) elevation keeps lake-surface slopes honest.
+// B also carries NEPAL_BIT (16) for cells inside Nepal and NEAR_BIT (32) for cells within ~5 km of Nepal,
+// so traces can stop at the border (see tracePath in src/scenario.js).
+const topoN = JSON.parse(fs.readFileSync('node_modules/world-atlas/countries-10m.json'));
+const gN = feature(topoN, topoN.objects.countries).features.find((f) => f.properties.name === 'Nepal').geometry;
+const ringN = gN.type === 'Polygon' ? gN.coordinates[0] : gN.coordinates.flat()[0];
+const dN = 'M' + ringN.map(([lo, la]) => `${((lo - BOX.w) / ROUTE.step).toFixed(2)},${((BOX.n - la) / ROUTE.step).toFixed(2)}`).join('L') + 'Z';
+const inNepal = await sharp(Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${nx}" height="${ny}"><rect width="100%" height="100%" fill="#000"/><path d="${dN}" fill="#fff"/></svg>`)).greyscale().raw().toBuffer();
+const R5 = 11, rowNear = new Uint8Array(N), near = new Uint8Array(N); // dilate the Nepal mask by R5 cells (separable)
+for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) { let v = 0; for (let d = -R5; d <= R5 && !v; d++) { const q = i + d; if (q >= 0 && q < nx && inNepal[j * nx + q] >= 128) v = 1; } rowNear[j * nx + i] = v; }
+for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) { let v = 0; for (let d = -R5; d <= R5 && !v; d++) { const q = j + d; if (q >= 0 && q < ny && rowNear[q * nx + i]) v = 1; } near[j * nx + i] = v; }
 const rbuf = Buffer.alloc(N * 3);
-for (let k = 0; k < N; k++) { const e = Math.round(z[k]); rbuf[3 * k] = e >> 8; rbuf[3 * k + 1] = e & 255; rbuf[3 * k + 2] = dir[k]; }
+for (let k = 0; k < N; k++) { const e = Math.round(z[k]); rbuf[3 * k] = e >> 8; rbuf[3 * k + 1] = e & 255; rbuf[3 * k + 2] = dir[k] | (inNepal[k] >= 128 ? 16 : 0) | (near[k] ? 32 : 0); }
 // full grid = test oracle only (2.7 MB); the site loads 64×64 tiles instead
 await sharp(rbuf, { raw: { width: nx, height: ny, channels: 3 } }).png({ compressionLevel: 9 }).toFile('test/fixtures/route-full.png');
 const TS = 64, ntx = Math.ceil(nx / TS), nty = Math.ceil(ny / TS);
@@ -73,10 +83,9 @@ for (let ty = 0; ty < nty; ty++) for (let tx = 0; tx < ntx; tx++) {
   for (let y = 0; y < h; y++) rbuf.copy(b, y * w * 3, ((ty * TS + y) * nx + tx * TS) * 3, ((ty * TS + y) * nx + tx * TS + w) * 3);
   await sharp(b, { raw: { width: w, height: h, channels: 3 } }).png({ compressionLevel: 9 }).toFile(`${OUT}route/${tx}_${ty}.png`);
 }
-// For each tile, every tile that a flow path starting in it can visit, all the way to the map edge
-// (river traces follow rivers across the plains; flood scenarios stop earlier and need a subset).
+// For each tile, every tile that a flow path starting in it can visit before it stops.
 const tileOf = (c) => Math.floor((c % nx) / TS) + Math.floor(Math.floor(c / nx) / TS) * ntx;
-// stop(k): where a path ends. Floods stop at the plains (as tracePath does); river traces run to the map edge.
+// stop(k): where a path ends.
 function tilesDownstream(stop) {
   const memo = new Map(); // entry cell -> Set of tiles visited from there
   const fromCell = (c0) => {
@@ -105,10 +114,11 @@ function tilesDownstream(stop) {
   }
   return res;
 }
-const downFlood = tilesDownstream((k) => z[k] < 120), downAll = tilesDownstream(() => false);
-fs.writeFileSync(OUT + 'route/index.json', JSON.stringify({ size: TS, ntx, nty, down: downFlood, downAll }));
+// Same stop as tracePath's: in the Indian plains more than ~5 km from Nepal (paths that left Nepal end before that).
+const downBorder = tilesDownstream((k) => !near[k] && z[k] < 400);
+fs.writeFileSync(OUT + 'route/index.json', JSON.stringify({ size: TS, ntx, nty, down: downBorder }));
 const mean = (o) => (Object.values(o).reduce((a, d) => a + d.length, 0) / (ntx * nty)).toFixed(1);
-console.log('route tiles', ntx * nty, 'mean tiles: flood', mean(downFlood), 'river trace', mean(downAll));
+console.log('route tiles', ntx * nty, 'mean tiles to the border', mean(downBorder));
 
 // 3. view grid heights for the 3D mesh (display only): 8-bit, value = round(√h · 2.68),
 // so steps are ≤ 8 m below 500 m and ≤ 30 m on the highest peaks. Scenario maths use route tiles.
@@ -136,8 +146,11 @@ for (let j = 0; j < TXH; j++) for (let i = 0; i < TXW; i++) {
   if (a > 400) { const w = Math.min(0.95, 0.42 + Math.log10(a / 400) * 0.42); tex[k] = tex[k] * (1 - w) + 10 * w; tex[k + 1] = tex[k + 1] * (1 - w) + 103 * w; tex[k + 2] = tex[k + 2] * (1 - w) + 135 * w; }
 }
 const topo = JSON.parse(fs.readFileSync('node_modules/world-atlas/countries-10m.json'));
+
 const nepal = feature(topo, topo.objects.countries).features.find((f) => f.properties.name === 'Nepal');
 const ring = nepal.geometry.type === 'Polygon' ? nepal.geometry.coordinates[0] : nepal.geometry.coordinates.flat()[0];
+// vector border for the sharp close-up terrain (the texture's border line blurs when zoomed in)
+fs.writeFileSync(OUT + 'border.json', JSON.stringify(ring.map(([a, b]) => [+a.toFixed(4), +b.toFixed(4)])));
 const d = 'M' + ring.map(([lo, la]) => `${((lo - BOX.w) / sx).toFixed(1)},${((BOX.n - la) / sy).toFixed(1)}`).join('L') + 'Z';
 const mask = await sharp(Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${TXW}" height="${TXH}"><rect width="100%" height="100%" fill="#000"/><path d="${d}" fill="#fff"/></svg>`)).greyscale().raw().toBuffer();
 // outside Nepal: mist relief (#E7ECEA lit, cooler in shadow), rivers faint

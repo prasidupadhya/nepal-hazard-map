@@ -1,18 +1,18 @@
 // River network + glacial-lake flood paths, from the same D8 flow grid the flood model uses.
 // Output public/terrain/rivers.json (catchment ≥ 250 km²) and rivers-small.json (25–250 km², loaded when zoomed in):
 //   lines: [startCell, "D8 codes", catchment km²]   one polyline per river reach (codes '1'..'8'), plains included
-//   lakes: { id: [startCell, "D8 codes"] }          where each ICIMOD lake's water goes, to the map edge (rivers.json only)
+//   lakes: { id: [startCell, "D8 codes"] }          where each ICIMOD lake's water goes, to the Nepal border (rivers.json only)
 // Run: node scripts/bake-rivers.js   (needs test/fixtures/route-full.png from bake-terrain.js)
 import fs from 'node:fs';
 import sharp from 'sharp';
 import { ROUTE, D8, BOX, kmPerDegLon, KM_PER_DEG_LAT } from '../src/grid.js';
-import { PLAINS_M } from '../src/scenario.js';
 
 const cellKm2 = (k) => ROUTE.step * KM_PER_DEG_LAT * ROUTE.step * kmPerDegLon(BOX.n - (Math.floor(k / ROUTE.nx) + 0.5) * ROUTE.step);
 const { nx, ny } = ROUTE, N = nx * ny;
 const { data } = await sharp('test/fixtures/route-full.png').raw().toBuffer({ resolveWithObject: true });
 const dir = new Uint8Array(N), elev = new Int16Array(N);
-for (let k = 0; k < N; k++) { elev[k] = (data[3 * k] << 8) | data[3 * k + 1]; dir[k] = data[3 * k + 2]; }
+const nepal = new Uint8Array(N), near = new Uint8Array(N); // NEPAL_BIT in the blue channel (see bake-terrain.js)
+for (let k = 0; k < N; k++) { elev[k] = (data[3 * k] << 8) | data[3 * k + 1]; dir[k] = data[3 * k + 2] & 15; nepal[k] = data[3 * k + 2] & 16 ? 1 : 0; near[k] = data[3 * k + 2] & 32 ? 1 : 0; }
 const down = new Int32Array(N).fill(-1), indeg = new Int32Array(N);
 for (let k = 0; k < N; k++) {
   if (!dir[k]) continue;
@@ -47,7 +47,13 @@ const lakes = {};
 for (const l of JSON.parse(fs.readFileSync('scripts/data/pdgl-icimod-2020.json')).lakes) {
   let k = Math.floor((BOX.n - l.ll[1]) / ROUTE.step) * nx + Math.floor((l.ll[0] - BOX.w) / ROUTE.step), codes = '';
   const start = k;
-  while (down[k] >= 0) { codes += dir[k]; k = down[k]; }
+  // same rule as tracePath: until the water leaves Nepal (more than 6 cells outside after entering), trimmed to the border
+  let entered = false, out = 0; const cells = [k];
+  while (down[k] >= 0) {
+    if (nepal[k]) { entered = true; out = 0; } else if ((entered && ++out > 6) || (!near[k] && elev[k] < 400)) break;
+    codes += dir[k]; k = down[k]; cells.push(k);
+  }
+  if (entered) while (codes.length && !nepal[cells[codes.length]]) codes = codes.slice(0, -1);
   lakes[l.id] = [start, codes];
 }
 fs.writeFileSync('public/terrain/rivers.json', JSON.stringify({ minKm2: 250, lines: big, lakes }));
