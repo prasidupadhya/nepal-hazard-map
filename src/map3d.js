@@ -443,14 +443,19 @@ function drawLabels(dist) {
   const W = labelCanvas.width, H = labelCanvas.height, s = devicePixelRatio;
   lctx.setTransform(1, 0, 0, 1, 0, 0); lctx.clearRect(0, 0, W, H);
   if (!labels.length || common.rise.value < 0.999 || !host.clientWidth) { if (labelCanvas.dataset.drawn) labelCanvas.dataset.drawn = ''; return; }
+  const drawn = paintLabels(lctx, s, host.clientWidth, host.clientWidth - inset, host.clientHeight, dist);
+  const d = drawn.join('|'); if (labelCanvas.dataset.drawn !== d) labelCanvas.dataset.drawn = d;
+}
+// fullW: width the projection spans; w × h: the part where labels may go (on desktop the sheet covers the rest)
+function paintLabels(lctx, s, fullW, w, h, dist, maxN = 90) {
   lctx.setTransform(s, 0, 0, s, 0, 0);
-  const w = host.clientWidth - inset, h = host.clientHeight, boxes = [], drawn = [];
+  const boxes = [], drawn = [];
   lctx.textBaseline = 'middle'; lctx.lineJoin = 'round';
   for (const l of labels) {
-    if (dist > LABEL_MAX_DIST[l.rank] || drawn.length >= 90) continue;
+    if (dist > LABEL_MAX_DIST[l.rank] || drawn.length >= maxN) continue;
     lv.set(l.x, l.y, l.z).project(camera);
     if (lv.z > 1) continue;
-    const px = ((lv.x + 1) / 2) * host.clientWidth, py = ((1 - lv.y) / 2) * h;
+    const px = ((lv.x + 1) / 2) * fullW, py = ((1 - lv.y) / 2) * h;
     if (px < 0 || py < 0 || px > w || py > h) continue;
     const font = l.rank === 0 ? '650 15px Anek, "Noto Sans Devanagari", system-ui, sans-serif' : l.rank === 1 ? '600 13.5px Anek, "Noto Sans Devanagari", system-ui, sans-serif' : l.rank === 2 ? '500 12.5px Anek, "Noto Sans Devanagari", system-ui, sans-serif' : '500 12px Anek, "Noto Sans Devanagari", system-ui, sans-serif';
     lctx.font = font;
@@ -463,7 +468,7 @@ function drawLabels(dist) {
     const tx = dot ? px + 7 : px - tw / 2;
     lctx.strokeText(l.text, tx, py); lctx.fillText(l.text, tx, py);
   }
-  const d = drawn.join('|'); if (labelCanvas.dataset.drawn !== d) labelCanvas.dataset.drawn = d;
+  return drawn;
 }
 export function showLayer(name, on) { if (layers[name]) { layers[name].obj.visible = on; layers[name].visible = on; dirty = true; } }
 
@@ -580,6 +585,52 @@ export function setFronts(early, late) {
 }
 export const hideFronts = () => setFronts(null, null);
 
-// image of the current view (for printing)
-export function snapshot() { renderer.render(scene, camera); return renderer.domElement.toDataURL('image/jpeg', 0.85); }
+// ---- print: a north-up, straight-down map of an area, with place names, scale bar and north arrow ----
+// Not a copy of the screen: the screen view is tilted, cropped by the sheet and has no scale.
+// bounds = [west, south, east, north]; cw × ch = layout size in CSS px, k = pixels per CSS px.
+export function printImage({ bounds, cw = 1000, ch = 540, k = 2, km = 'km' }) {
+  if (!terrain) return null;
+  const [w, s, e, n] = bounds, [x0, z0] = toXZ(w, n), [x1, z1] = toXZ(e, s);
+  // a long lens (near-orthographic): high ground isn't pushed outward, so the frame and the scale bar hold
+  const FOV = 10, ty = Math.tan((FOV * Math.PI) / 360), tx = (ty * cw) / ch, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+  const cy = heightAt(...toLL(cx, cz)) * 0.5;
+  const dist = Math.max((x1 - x0) / 2 / tx, (z1 - z0) / 2 / ty) * 1.04;
+  const eq = (dist * ty) / Math.tan((camera.fov * Math.PI) / 360); // the screen camera's distance for the same view (zoom-dependent detail)
+  const save = { pos: camera.position.clone(), tgt: controls.target.clone(), fov: camera.fov, far: camera.far, near: camera.near, pr: renderer.getPixelRatio(), fA: uni.fA.value, fB: uni.fB.value, det: detail.layers.map((L) => L.group.visible), bor: detail.border?.visible };
+  camera.fov = FOV; camera.far = dist * 2 + 500; camera.near = dist * 0.5; // tight depth range: rivers stay above the relief
+  // straight down (a hair of tilt keeps "up" = north well defined): the scale is the same across the sheet
+  camera.position.set(cx, cy + dist, cz + dist * 0.004); controls.target.set(cx, cy, cz); camera.lookAt(controls.target);
+  camera.aspect = cw / ch; camera.clearViewOffset(); camera.updateProjectionMatrix();
+  renderer.setPixelRatio(k); renderer.setSize(cw, ch, false); ptUni.pr.value = k;
+  for (const m of lineMats) m.resolution.set(cw, ch);
+  // the close-up tiles belong to the screen view: print the even overview everywhere
+  uni.fA.value = uni.fB.value = 0; for (const L of detail.layers) L.group.visible = false; if (detail.border) detail.border.visible = false;
+  common.fogNear.value = scene.fog.near = dist * 3; common.fogFar.value = scene.fog.far = dist * 6;
+  // rivers at full strength on paper (scenario screens fade them behind the scenario)
+  for (const o of netObjs) { o.visible = common.rise.value > 0.999 && !!layers.network?.visible && o.userData.minKm2 >= netMinKm2 && eq < o.userData.maxDist * 1.6; o.material.opacity = 0.9; }
+  const sc = Math.max(0.35, eq / 260); if (marker) marker.scale.setScalar(sc); if (fronts) fronts.forEach((f) => f.scale.setScalar(sc));
+  renderer.render(scene, camera);
+  const out = document.createElement('canvas'); out.width = cw * k; out.height = ch * k;
+  const c = out.getContext('2d'); c.drawImage(renderer.domElement, 0, 0);
+  paintLabels(c, k, cw, cw, ch, eq * 0.8, 140);
+  // scale bar (true at the centre; the view is straight down, so it holds across the map to within a few %)
+  const kmPerPx = (2 * dist * ty) / ch, nice = [1, 2, 5, 10, 20, 25, 50, 100, 200].filter((v) => v / kmPerPx <= cw * 0.2).pop() || 1, bw = nice / kmPerPx;
+  c.setTransform(k, 0, 0, k, 0, 0);
+  const bx = 14, by = ch - 16;
+  c.fillStyle = 'rgba(255,255,255,.88)'; c.beginPath(); c.roundRect(bx - 8, by - 28, bw + 16 + 40, 38, 5); c.fill();
+  c.fillStyle = '#1b2a32'; c.fillRect(bx, by - 5, bw / 2, 5); c.strokeStyle = '#1b2a32'; c.lineWidth = 1; c.strokeRect(bx + 0.5, by - 5 + 0.5, bw - 1, 5 - 1);
+  c.font = '600 12px Anek, "Noto Sans Devanagari", system-ui, sans-serif'; c.textBaseline = 'alphabetic';
+  c.fillText('0', bx - 2, by - 10); const lab = km(nice); c.fillText(lab, bx + bw - c.measureText(lab).width / 2, by - 10);
+  // north arrow
+  const nx = cw - 32, ny = 32;
+  c.fillStyle = 'rgba(255,255,255,.88)'; c.beginPath(); c.arc(nx, ny + 1, 19, 0, 7); c.fill();
+  c.fillStyle = '#1b2a32'; c.font = '700 11px Anek, system-ui, sans-serif'; c.fillText('N', nx - c.measureText('N').width / 2, ny - 4);
+  c.beginPath(); c.moveTo(nx, ny - 1); c.lineTo(nx + 6, ny + 14); c.lineTo(nx, ny + 10); c.lineTo(nx - 6, ny + 14); c.closePath(); c.fill();
+  // put the screen view back
+  camera.position.copy(save.pos); controls.target.copy(save.tgt); camera.fov = save.fov; camera.far = save.far; camera.near = save.near; camera.updateProjectionMatrix(); renderer.setPixelRatio(save.pr); ptUni.pr.value = save.pr;
+  for (const o of netObjs) o.material.opacity = netMinKm2 ? 0.35 : 0.95;
+  uni.fA.value = save.fA; uni.fB.value = save.fB; detail.layers.forEach((L, i) => (L.group.visible = save.det[i] ?? true)); if (detail.border) detail.border.visible = save.bor;
+  resize(); labelKey = ''; dirty = true;
+  return out.toDataURL('image/jpeg', 0.9);
+}
 export const ready = () => !!terrain;
