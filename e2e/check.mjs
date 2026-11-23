@@ -82,5 +82,22 @@ for (const tab of ['incidents', 'quakes']) {
   const got = await page.$$eval('#rows li', (l) => l.reduce((n, x) => n + (+x.dataset.n || 1), 0)); // merged duplicate reports count each record
   ok(got === want, `all archived ${tab} reachable via Load older (${got}/${want})`);
 }
+// iPhone-like: touch only, and canvas read-backs carry noise as with Safari's fingerprinting protection
+// (on by default since Safari 26). Routing must not depend on canvas pixels; taps must reach the map.
+{ const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await ctx.addInitScript(() => { const wrap = (P) => { if (!P) return; const g = P.prototype.getImageData; P.prototype.getImageData = function (...a) { const d = g.apply(this, a); for (let i = 0; i < d.data.length; i += 4) if (Math.random() < 0.1) d.data[i + ((Math.random() * 3) | 0)] ^= 1; return d; }; }; wrap(window.CanvasRenderingContext2D); wrap(window.OffscreenCanvasRenderingContext2D); });
+  const p = await ctx.newPage();
+  await p.goto(BASE + '#/glof'); await p.waitForFunction(() => performance.getEntriesByName('map-ready').length, null, { timeout: 90000 });
+  await p.waitForSelector('#run'); await p.tap('#run'); await p.waitForSelector('#out tbody tr', { timeout: 30000 });
+  const last = await p.$eval('#out tbody tr:last-child', (r) => r.innerText.replace(/\s+/g, ' '));
+  ok(/Nepal border \* 348 km/.test(last), `phone + canvas noise: lake burst reaches the border at the right distance (${last.slice(0, 40)})`);
+  await p.tap('#nav a[data-v="map"]'); await p.waitForTimeout(2500);
+  ok(await p.evaluate(() => scrollY === 0), 'switching tab from a scrolled page brings the map back into view');
+  const box = await p.locator('#gl').boundingBox(); let txt = '';
+  for (const [fx, fy] of [[0.55, 0.45], [0.4, 0.6], [0.6, 0.35]]) { await p.touchscreen.tap(box.x + box.width * fx, box.y + box.height * fy); await p.waitForTimeout(1500); txt = await p.$eval('#sel', (e) => e.innerText).catch(() => ''); if (/Followed for/.test(txt)) break; }
+  const km = +((txt.replace(/\n+/g, ' ').match(/Followed for ([\d,]+) km/) || [])[1] || '0').replace(/,/g, '');
+  ok(km > 5 && km < 900, `phone + canvas noise: a finger tap traces the river to the border (${km} km)`);
+  ok(await p.$eval('#sel', (e) => e.getBoundingClientRect().top < innerHeight - 120), 'the trace details open in view, right under the map');
+  await ctx.close(); }
 await browser.close();
 console.log(fails.length ? `\n${fails.length} FAILED` : '\nALL PASS'); process.exit(fails.length ? 1 : 0);
