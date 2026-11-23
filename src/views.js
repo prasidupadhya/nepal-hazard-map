@@ -4,7 +4,7 @@ import { map } from './map.js';
 import { MMI_COLORS } from './colors.js';
 import { state, dataReady, mapReady, showChips, LAYER_COLOR, LAKE_RANK_COLOR, SCENARIO } from './main.js';
 import { PROVINCES } from './districts.js';
-import { VIEW, ROUTE, D8 } from './grid.js';
+import { VIEW, ROUTE, D8, BOX } from './grid.js';
 import { makeRouteLoader } from './route-tiles.js';
 import * as js from './scenario.js';
 
@@ -37,13 +37,65 @@ function legend() {
   L.innerHTML = `<span>${t('quake.legend')}</span><div class="bar">${[3, 4, 5, 6, 7, 8, 9, 10].map((m) => `<i style="background:${MMI_COLORS[m]}"></i>`).join('')}</div><div class="ticks"><span>III</span><span>V</span><span>VII</span><span>X</span></div>`;
   L.hidden = false;
 }
-function printBlock(inputsHtml) {
-  return `<div class="print-only"><p class="note">${t('title')}. ${t('printed')}: ${when(new Date().toISOString())}. ${location.href.split('#')[0]}</p>${inputsHtml}<img class="shot" alt=""></div>`;
+// ---------- print report ----------
+// What the printer gets is a report sheet, not the screen: masthead, a plain "not a warning" box,
+// the key numbers, a north-up map drawn for paper (with names, scale and legend), then the details.
+const LOGO = `<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M2 25 11 11l4 5 6-9 9 18z" fill="currentColor"/><path d="M2 27.5h28" stroke="#0a6787" stroke-width="2"/></svg>`;
+const MLN = () => (lang === 'ne' ? 'दस लाख घन मि.' : 'million m³');
+const swatch = (kind, c) => `<i class="rp-sw ${kind}" style="--c:${c}"></i>`;
+function report({ kicker, title, sub = '', figs = [], caption = '', legend: lg = '', scenario = true }) {
+  return `<section class="report print-only">
+    <header class="rp-mast"><span class="rp-brand">${LOGO}${t('title')}</span><span>${scenario ? t('rp.report') + ' · ' : ''}${t('printed')} ${when(new Date().toISOString())}<br>${esc(location.host + location.pathname)}</span></header>
+    <p class="rp-kicker">${kicker}</p><h1 class="rp-title">${title}</h1>${sub ? `<p class="rp-sub">${sub}</p>` : ''}
+    <div class="rp-warn"><b>${scenario ? t('rp.notWarning') : t('disclaimer')}</b> ${scenario ? `${t('rp.scenario')} ${t('disclaimer')}` : t('rp.dataNote')}<span class="rp-sos">${t('rp.emergency')}</span></div>
+    ${figs.length ? `<dl class="rp-figs">${figs.map((f) => `<div><dt>${f.k}</dt><dd>${f.v}</dd>${f.s ? `<p>${f.s}</p>` : ''}</div>`).join('')}</dl>` : ''}
+    <figure class="rp-map"><img class="shot" alt=""><figcaption>${lg ? `<span class="rp-legend">${lg}</span>` : ''}<span>${caption} ${t('rp.north')}</span></figcaption></figure>
+  </section>`;
 }
-function doPrint() {
-  const img = document.querySelector('#panel img.shot');
-  if (img && map.ready()) img.src = map.snapshot();
-  setTimeout(() => window.print(), 50);
+// bounds: [w, s, e, n] to draw; before/after: put the map into its print state and back
+async function doPrint(bounds = [BOX.w, BOX.s, BOX.e, BOX.n], before, after) {
+  const img = document.querySelector('#panel .report img.shot');
+  if (img && map.ready()) {
+    before?.();
+    img.src = map.printImage({ bounds, km: (v) => `${num(v)} ${t('km')}` }) || '';
+    after?.();
+    await img.decode().catch(() => {});
+  }
+  window.print();
+}
+// area around a set of points, padded, at least `minDeg` across
+function boundsOf(lls, pad = 0.12, minDeg = 0.5) {
+  let w = 180, s = 90, e = -180, n = -90;
+  for (const [x, y] of lls) { w = Math.min(w, x); e = Math.max(e, x); s = Math.min(s, y); n = Math.max(n, y); }
+  const cx = (w + e) / 2, cy = (s + n) / 2, hw = Math.max(minDeg, (e - w) * (1 + 2 * pad)) / 2, hh = Math.max(minDeg * 0.6, (n - s) * (1 + 2 * pad)) / 2;
+  return [cx - hw, cy - hh, cx + hw, cy + hh];
+}
+const niceStep = (max, n) => { const raw = max / n, p = 10 ** Math.floor(Math.log10(raw)); return [1, 2, 2.5, 5, 10].map((m) => m * p).find((v) => v >= raw); };
+// arrival band along the path (earliest–latest), with a numbered ruler of the places in the table
+function arrivalChart(res, rows) {
+  const W = 700, l = 48, r = 16, top = 10, bot = 120, maxKm = res.at(-1).km, maxH = res.at(-1).arrivalH[1];
+  const xs = niceStep(maxKm, 7), hs = niceStep(maxH, 5), hMax = Math.ceil(maxH / hs) * hs;
+  const X = (km) => l + (km / maxKm) * (W - l - r), Y = (h) => bot - (h / hMax) * (bot - top);
+  const step = Math.max(1, Math.floor(res.length / 300)), pts = res.filter((_, i) => i % step === 0 || i === res.length - 1);
+  const line = (k) => pts.map((q, i) => `${i ? 'L' : 'M'}${X(q.km).toFixed(1)},${Y(q.arrivalH[k]).toFixed(1)}`).join('');
+  const band = line(0) + pts.slice().reverse().map((q) => `L${X(q.km).toFixed(1)},${Y(q.arrivalH[1]).toFixed(1)}`).join('') + 'Z';
+  let grid = '';
+  for (let h = 0; h <= hMax + 1e-9; h += hs) grid += `<line x1="${l}" x2="${W - r}" y1="${Y(h)}" y2="${Y(h)}" class="g"/><text x="${l - 6}" y="${Y(h) + 3.5}" text-anchor="end">${num(h)}</text>`;
+  for (let k = 0; k <= maxKm + 1e-9; k += xs) grid += `<line x1="${X(k)}" x2="${X(k)}" y1="${bot}" y2="${bot + 4}" class="a"/><text x="${X(k)}" y="${bot + 16}" text-anchor="middle">${num(k)}</text>`;
+  // numbered places, in up to four lanes so close neighbours don't overlap
+  const lanes = [], RW = 15; let marks = '';
+  rows.forEach(({ q }, i) => {
+    const x = X(q.km); let lane = lanes.findIndex((end) => x - end >= RW); if (lane < 0) { lane = Math.min(3, lanes.length); } lanes[lane] = x;
+    const y = bot + 30 + lane * 15;
+    marks += `<line x1="${x}" x2="${x}" y1="${Y(q.arrivalH[0])}" y2="${y - 7}" class="t"/><circle cx="${x}" cy="${y}" r="7"/><text x="${x}" y="${y + 3.3}" text-anchor="middle" class="n">${num(i + 1)}</text>`;
+  });
+  const H = bot + 30 + Math.max(1, lanes.length) * 15 + 14;
+  return `<figure class="rp-chart print-only"><figcaption><b>${t('rp.chart')}</b><span>${swatch('band', '#FFD60A')}${t('rp.early')} – ${t('rp.late')}</span><span>${t('rp.chartNote')}</span></figcaption>
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${t('rp.chart')}">${grid}
+    <path d="${band}" class="band"/><path d="${line(1)}" class="late"/><path d="${line(0)}" class="early"/>
+    <line x1="${l}" x2="${W - r}" y1="${bot}" y2="${bot}" class="a"/>${marks}
+    <text x="${(l + W - r) / 2}" y="${H - 4}" text-anchor="middle" class="ax">${t('rp.xAxis')}</text>
+    <text transform="translate(12 ${(top + bot) / 2}) rotate(-90)" text-anchor="middle" class="ax">${t('rp.yAxis')}</text></svg></figure>`;
 }
 
 // Scenario engine: Rust→WASM when available (faster on phones), JS otherwise. Same results (tested).
@@ -214,14 +266,16 @@ const dataView = {
     await dataReady; if (!live()) return;
     const tab = location.hash.split('/')[2] || 'rivers', L = state.latest, S = L.sources[tab] || {};
     const counts = { rivers: L.rivers.length, rain: L.rain.length, quakes: L.quakes.length, incidents: L.incidents.length };
-    el.innerHTML = `<h1>${t('nav.data')}</h1>${printBlock('')}${glance()}
+    const on = Object.keys(state.layers).filter((k) => state.layers[k]);
+    el.innerHTML = `<h1>${t('nav.data')}</h1>${report({ kicker: t('rp.kData'), title: t('nav.data'), scenario: false, caption: t('rp.mapData'), sub: `${t('rp.dataAsOf')}: ${when(L.sources.rivers?.fetched_at)}`,
+      legend: on.map((k) => `${swatch(k === 'network' ? 'line' : 'dot', LAYER_COLOR[k])}${t('layers.' + k)}`).join('') })}${glance()}
       <div class="tabs" role="tablist">${['rivers', 'rain', 'quakes', 'incidents'].map((k) => `<button role="tab" aria-selected="${k === tab}" data-k="${k}">${t('feeds.' + k)} <span class="count">${num(counts[k])}</span></button>`).join('')}</div>
       <p class="feedline">${S.ok === false ? `<span class="state err">${t('failed')}</span> ` : ''}${tf('glance.updated', age(S.newest), esc(t('origin.' + S.origin)))}${S.expect_h ? '' : ` ${t('quakeAgeNote')}`}</p>
       <input class="filter" type="search" placeholder="${t('filter')}" aria-label="${t('filter')}">
       <div id="rows"></div><p class="row noprint" id="more"></p>
       <p class="noprint"><button class="btn ghost" type="button" id="pr">${t('print')}</button></p>`;
     el.querySelector('.tabs').onclick = (e) => { const b = e.target.closest('[data-k]'); if (b) location.hash = '#/data/' + b.dataset.k; };
-    el.querySelector('#pr').onclick = doPrint;
+    el.querySelector('#pr').onclick = () => doPrint();
     let all = { rivers: L.rivers, rain: L.rain, quakes: L.quakes, incidents: L.incidents }[tab].slice();
     const box = el.querySelector('#rows'), filter = el.querySelector('.filter');
     const match = (x, q) => !q || (x.name || x.place || x.title || '').toLowerCase().includes(q) || (x.titleNe || '').includes(q);
@@ -361,19 +415,28 @@ function syncPlay() { const b = document.getElementById('play'); if (b) b.textCo
 function showResult(el) {
   const res = G.res, out = el.querySelector('#out'), end = res.at(-1).arrivalH[1], A = js.ASSUMPTIONS.glof;
   const rows = placesAlong(res);
-  out.innerHTML = `${printBlock(`<p><b>${t('glof.lake')}:</b> ${esc(name(G.lake))}. <b>${t('glof.volume')}:</b> ${num(G.vol[0], 1)}–${num(G.vol[1], 1)}</p>`)}
+  const last = res.at(-1), fmtQ = (q) => `${num(Math.round(q[0] / 10) * 10)}–${num(Math.round(q[1] / 10) * 10)}`, units = lang === 'ne' ? 'घन मि./से.' : 'm³/s';
+  out.innerHTML = `${report({ kicker: t('rp.kGlof'), title: esc(tf('rp.tGlof', name(G.lake))),
+    sub: `${t('lake.rank')} ${t('lake.rank' + G.lake.rank)} · ${t('lake.basin')} ${lang === 'ne' ? G.lake.basin[1] : G.lake.basin[0]} · ${num(G.lake.ll[1], 3)}°N ${num(G.lake.ll[0], 3)}°E`,
+    figs: [{ k: t('glof.volume').replace(/\s*\(.*\)/, ''), v: `${num(G.vol[0], 1)}–${num(G.vol[1], 1)}`, s: MLN() },
+      { k: t('rp.peak'), v: fmtQ(res[0].peak), s: units },
+      { k: t('rp.border'), v: `${fmtH(last.arrivalH[0])} – ${fmtH(last.arrivalH[1])}`, s: tf('rp.downstream', num(last.km)) },
+      { k: t('rp.places'), v: num(rows.length - 1), s: t('rp.placesSub') }],
+    caption: t('rp.mapGlof'), legend: `${swatch('path', '#FFD60A')}${t('rp.path')}${swatch('dot', LAKE_RANK_COLOR[G.lake.rank])}${t('rp.lake')}${swatch('line', LAYER_COLOR.network || '#0A6787')}${t('rp.rivers')}` })}
+    ${arrivalChart(res, rows)}
     <h2>${t('glof.result')}</h2>
     <div class="timeline noprint"><button class="btn ghost" id="play" type="button"></button>
       <input id="tslider" type="range" min="0" max="${end}" step="any" aria-label="${t('glof.time')}"><output id="tout"></output></div>
     <p class="fronts noprint"><span style="--c:${SCENARIO.ink}">${lang === 'ne' ? 'छिटो आइपुग्ने अग्रभाग' : 'Earliest front'}</span><span style="--c:${SCENARIO.late};--o:${SCENARIO.ink}">${lang === 'ne' ? 'ढिलो आइपुग्ने अग्रभाग' : 'Latest front'}</span></p>
     <div class="tw"><table><thead><tr><th>${t('glof.place')}</th><th>${t('glof.dist')}</th><th>${t('glof.arrival')}</th><th>${t('glof.peak')}</th><th>${t('glof.depth')}</th></tr></thead>
-    <tbody>${rows.map(({ p, q }) => `<tr><td>${esc(name(p))}${q.z < js.PLAINS_M ? ' *' : ''}</td><td class="n">${num(q.km)} ${t('km')}</td><td>${fmtH(q.arrivalH[0])} – ${fmtH(q.arrivalH[1])}</td><td class="n">${num(Math.round(q.peak[0] / 10) * 10)} – ${num(Math.round(q.peak[1] / 10) * 10)}</td><td class="n">${num(q.depth[0], 1)} – ${num(q.depth[1], 1)}</td></tr>`).join('')}</tbody></table></div>
+    <tbody>${rows.map(({ p, q }, i) => `<tr><td><span class="rn print-only">${num(i + 1)}</span>${esc(name(p))}${q.z < js.PLAINS_M ? ' *' : ''}</td><td class="n">${num(q.km)} ${t('km')}</td><td>${fmtH(q.arrivalH[0])} – ${fmtH(q.arrivalH[1])}</td><td class="n">${num(Math.round(q.peak[0] / 10) * 10)} – ${num(Math.round(q.peak[1] / 10) * 10)}</td><td class="n">${num(q.depth[0], 1)} – ${num(q.depth[1], 1)}</td></tr>`).join('')}</tbody></table></div>
     <p class="note">${t('glof.ends')}</p>
     <h3>${t('assumptions')}</h3>
     <ul class="note"><li>${A.peakLow}; ${A.peakHigh}</li><li>Manning n ${A.manningN.join('–')}; width = (${A.widthCoef.join('–')})·√Q; peak decay length ${A.attenuationKm.join('–')} km; flood front ≤ ${A.maxCelerity} m/s</li>
     <li>${lang === 'ne' ? 'स्थानीय तहको केन्द्रबिन्दु बाटोबाट ५ कि.मि. भित्र भए मात्र तालिकामा देखिन्छ।' : 'A local level is listed when its centre is within 5 km of the path.'}</li></ul>
     <p class="noprint"><button class="btn ghost" type="button" id="pr">${t('print')}</button></p>`;
-  out.querySelector('#pr').onclick = doPrint;
+  // print the whole flooded path (not the moment the timeline is at), then put the timeline back
+  out.querySelector('#pr').onclick = () => doPrint(boundsOf(res.map((q) => q.ll)), () => { map.setPathTime(-1); map.hideFronts(); }, () => { map.setPathTime(G.t); syncFronts(); });
   out.querySelector('#play').onclick = () => { if (G.t >= end) G.t = 0; G.playing = !G.playing; G.last = 0; syncPlay(); };
   out.querySelector('#tslider').oninput = (e) => { G.t = +e.target.value; G.playing = false; syncPlay(); map.setPathTime(G.t); syncTime(); syncFronts(); };
   syncPlay(); syncTime();
@@ -437,13 +500,25 @@ function renderQuakeTable() {
   document.getElementById('epi').textContent = Q.label ? name(Q.label) : `${num(Q.ll[1], 3)}°N, ${num(Q.ll[0], 3)}°E`;
   const dist = state.places.filter((p) => p.t === 'd').map((d) => ({ d, b: js.shakingAt(Q, ...d.ll) })).sort((x, y) => y.b[1] - x.b[1]);
   const A = js.ASSUMPTIONS.quake;
-  el.innerHTML = `${printBlock(`<p><b>${t('quake.epi')}:</b> ${Q.label ? esc(name(Q.label)) : ''} ${Q.ll[1].toFixed(3)}°N ${Q.ll[0].toFixed(3)}°E. <b>${t('quake.mag')}:</b> ${num(Q.M, 1)}. <b>${t('quake.strike')}:</b> ${num(Q.strike)}</p>`)}
-    <h2>${t('quake.result')}</h2>
-    <table><thead><tr><th>${t('quake.district')}</th><th>${t('quake.band')}</th><th></th></tr></thead><tbody>
+  const severe = dist.filter(({ b }) => Math.round(b[1]) >= 8).length, severeHi = dist.filter(({ b }) => Math.round(b[2]) >= 8).length, top = dist[0];
+  // districts grouped by middle estimate, strongest first, names A–Z inside a group
+  const groups = [];
+  for (const { d, b } of dist) { const k = Math.max(1, Math.min(10, Math.round(b[1]))); let g = groups.find((x) => x.k === k); if (!g) groups.push((g = { k, lo: 10, hi: 1, ds: [] })); g.ds.push(d); g.lo = Math.min(g.lo, Math.round(b[0])); g.hi = Math.max(g.hi, Math.round(b[2])); }
+  el.innerHTML = `${report({ kicker: t('rp.kQuake'), title: esc(tf('rp.tQuake', num(Q.M, 1))),
+    sub: `${t('quake.epi')}: ${Q.label ? esc(name(Q.label)) + ' · ' : ''}${num(Q.ll[1], 3)}°N ${num(Q.ll[0], 3)}°E · ${t('quake.strike')}: ${num(Q.strike)}`,
+    figs: [{ k: t('quake.mag'), v: num(Q.M, 1) },
+      { k: tf('rp.atLeast', mmiWord(8)), v: num(severe), s: tf('rp.upTo', num(severeHi)) },
+      { k: t('rp.strongest'), v: esc(name(top.d)), s: `${ROMAN[Math.round(top.b[0])]}–${ROMAN[Math.round(top.b[2])]} · ${mmiWord(top.b[1])}` },
+      { k: t('rp.rupture'), v: `${num(js.ruptureKm(Q.M))} ${t('km')}`, s: t('rp.centred') }],
+    caption: t('rp.mapQuake'), legend: `${swatch('dot', SCENARIO.ink)}${t('rp.epi')}<span class="rp-mmi">${[3, 4, 5, 6, 7, 8, 9, 10].map((m) => `<i style="background:${MMI_COLORS[m]}"></i>`).join('')}</span>${t('quake.legend')}: ${ROMAN[3]}–${ROMAN[10]}` })}
+    <section class="rp-groups print-only"><h2>${t('rp.groups')}</h2>${groups.map((g) => `<div class="rp-group"><h3>${swatch('dot', MMI_COLORS[g.k])}${ROMAN[g.k]} · ${t('quake.mmi.' + [10, 9, 8, 7, 6, 5, 4, 2].find((x) => g.k >= x))} <small>${t('rp.band')} ${ROMAN[g.lo]}–${ROMAN[g.hi]} · ${num(g.ds.length)}</small></h3>
+      <p>${g.ds.map((d) => esc(name(d))).sort((a, b) => a.localeCompare(b, lang)).join(' · ')}</p></div>`).join('')}</section>
+    <h2 class="noprint">${t('quake.result')}</h2>
+    <table class="noprint"><thead><tr><th>${t('quake.district')}</th><th>${t('quake.band')}</th><th></th></tr></thead><tbody>
     ${dist.map(({ d, b }) => `<tr><td>${esc(name(d))}</td><td class="n">${mmiBand(b[0], b[2])}</td><td>${mmiWord(b[1])}</td></tr>`).join('')}</tbody></table>
     <h3>${t('assumptions')}</h3><ul class="note"><li>${A.model}</li><li>${A.rupture}: ${num(js.ruptureKm(Q.M))} ${t('km')}</li><li>±${A.spread} ${lang === 'ne' ? 'तीव्रता तह अनिश्चितता (अनुमानित)' : 'intensity level model spread (assumed)'}; ${lang === 'ne' ? 'माटो र उपत्यकाको प्रभाव समावेश छैन' : 'soil and basin effects not included'}</li></ul>
     <p class="noprint"><button class="btn ghost" type="button" id="pr">${t('print')}</button></p>`;
-  el.querySelector('#pr').onclick = doPrint;
+  el.querySelector('#pr').onclick = () => doPrint(undefined, () => { Q.animating = false; map.setShakeRadius((Q.r = 800)); });
 }
 
 // ---------- ABOUT ----------
