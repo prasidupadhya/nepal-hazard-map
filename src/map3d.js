@@ -92,6 +92,9 @@ void main(){ float s = 1. - smoothstep(0., .08, abs(fract(vY / 3.) - .5) - .42);
 
 export async function init(el, { onPick: pick, onFrame: frame } = {}) {
   host = el; onPick = pick; onFrame = frame;
+  // some old phones and locked-down browsers have no WebGL: say so instead of failing noisily
+  const probe = document.createElement('canvas');
+  if (!(probe.getContext('webgl2') || probe.getContext('webgl'))) throw new Error('no-webgl');
   renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: false });
   renderer.setPixelRatio(pr); ptUni.pr.value = pr;
   renderer.setClearColor(MIST);

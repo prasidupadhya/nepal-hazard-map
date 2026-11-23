@@ -5,7 +5,7 @@ const { chromium } = createRequire(import.meta.url)(process.env.PW || 'playwrigh
 const BASE = process.argv[2] || 'http://localhost:4173/';
 const SHOTS = process.env.SHOTS || '';
 const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
-const fails = []; const ok = (c, m) => { if (!c) fails.push(m); console.log(c ? 'PASS' : 'FAIL', m); };
+const fails = []; const ok = (c, m) => { if (!c) fails.push(m); console.log(c ? 'PASS' : 'FAIL', m); if (!c && process.env.GITHUB_ACTIONS) console.log(`::error title=e2e::${String(m).replace(/\n/g, ' ')}`); };
 for (const lang of ['en', 'ne']) for (const width of [360, 1280]) {
   const ctx = await browser.newContext({ viewport: { width, height: width < 500 ? 740 : 800 }, deviceScaleFactor: 1 });
   const page = await ctx.newPage(); const errs = [];
@@ -98,6 +98,39 @@ for (const tab of ['incidents', 'quakes']) {
   const km = +((txt.replace(/\n+/g, ' ').match(/Followed for ([\d,]+) km/) || [])[1] || '0').replace(/,/g, '');
   ok(km > 5 && km < 900, `phone + canvas noise: a finger tap traces the river to the border (${km} km)`);
   ok(await p.$eval('#sel', (e) => e.getBoundingClientRect().top < innerHeight - 120), 'the trace details open in view, right under the map');
+  await ctx.close(); }
+// phone: Run is below the map; the page scrolls back up so the flood starts in view
+{ const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  const p = await ctx.newPage();
+  await p.goto(BASE + '#/glof'); await p.waitForFunction(() => performance.getEntriesByName('map-ready').length, null, { timeout: 90000 });
+  await p.locator('#run').scrollIntoViewIfNeeded(); const y0 = await p.evaluate(() => scrollY);
+  await p.tap('#run'); await p.waitForSelector('#out tbody tr', { timeout: 30000 });
+  await p.waitForFunction(() => scrollY === 0 && /Pause/.test(document.getElementById('play')?.textContent || ''), null, { timeout: 10000 }).catch(() => {});
+  const st = await p.evaluate(() => ({ y: scrollY, t: document.getElementById('tout')?.textContent, play: document.getElementById('play')?.textContent }));
+  ok(y0 > 100 && st.y === 0 && /Pause/.test(st.play), `phone: Run scrolls up to the map, then the flood plays (scrolled from ${y0} to ${st.y}; ${st.play}, ${st.t})`);
+  await ctx.close(); }
+// shared links reopen the exact scenario
+{ const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } }); const p = await ctx.newPage();
+  await p.goto(BASE + '#/glof/GL086925E27898N/20-35'); await p.waitForSelector('#out tbody tr', { timeout: 30000 });
+  const g = await p.evaluate(() => [document.getElementById('lake').value, document.getElementById('v0').value, document.getElementById('v1').value]);
+  ok(g.join() === 'GL086925E27898N,20,35', `a lake-burst link opens that lake and volume and runs it (${g})`);
+  await p.goto(BASE + '#/quake/27.700,85.300/6.9/120'); await p.waitForSelector('#out tbody tr', { timeout: 30000 });
+  const q = await p.evaluate(() => [document.getElementById('mo').textContent, document.getElementById('S').value, location.hash]);
+  ok(q[0] === '6.9' && q[1] === '120' && q[2] === '#/quake/27.700,85.300/6.9/120', `an earthquake link opens that epicentre, magnitude and direction (${q})`);
+  await ctx.close(); }
+// failure cases: no WebGL (old phones, locked-down browsers) and data that fails to load
+{ const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  await ctx.addInitScript(() => { const g = HTMLCanvasElement.prototype.getContext; HTMLCanvasElement.prototype.getContext = function (t, ...a) { return /webgl/.test(t) ? null : g.call(this, t, ...a); }; });
+  const p = await ctx.newPage(); const errs = []; p.on('pageerror', (e) => errs.push(e.message));
+  await p.goto(BASE + '#/glof'); await p.waitForSelector('#run'); await p.tap('#run');
+  const rows = await p.waitForSelector('#out tbody tr', { timeout: 30000 }).then(() => p.$$eval('#out tbody tr', (r) => r.length), () => 0);
+  ok(rows > 3 && /WebGL/.test(await p.$eval('#stage', (e) => e.innerText)) && !errs.length, `no WebGL: the map says why, the lake burst still runs (${rows} rows), no errors ${JSON.stringify(errs.slice(0, 1))}`);
+  await ctx.close(); }
+{ const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
+  await ctx.route('**/data/latest.json', (r) => r.abort());
+  const p = await ctx.newPage(); const errs = []; p.on('pageerror', (e) => errs.push(e.message));
+  await p.goto(BASE + '#/'); const shown = await p.waitForSelector('#retry', { timeout: 20000 }).then(() => true, () => false);
+  ok(shown && !errs.length, 'data fails to load: a clear message and a "Try again" button, no errors');
   await ctx.close(); }
 await browser.close();
 console.log(fails.length ? `\n${fails.length} FAILED` : '\nALL PASS'); process.exit(fails.length ? 1 : 0);

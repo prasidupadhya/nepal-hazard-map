@@ -34,8 +34,13 @@ phones, works in both languages, and prints a clean report.
   water depth as ranges.
 - **What if a big earthquake hits?** Choose the epicentre, magnitude and fault
   direction; see the likely shaking band for all 77 districts.
+- **Share a scenario:** the link holds the lake and volume, or the epicentre,
+  magnitude and fault direction, so whoever opens it sees the same result.
 - **Printable reports:** a north-up map with scale and legend, key figures, an
   arrival-time chart, and the full table, on two A4 pages.
+- **Installs like an app:** add it to the home screen from the browser menu.
+- **Works on every phone:** no WebGL? The data and scenarios still work and
+  the map says why. Data can't load? A clear message and a retry button.
 - **Rust → WebAssembly** scenario engine, kept identical to the JavaScript
   reference by tests.
 
@@ -90,7 +95,8 @@ Other commands:
 | `node bench/perf.mjs` | Mid-range phone benchmark; results in [bench/RESULTS.md](bench/RESULTS.md) |
 
 The site is fully static, so any static host works. The live site is on
-Vercel. A GitHub Action (`.github/workflows/daily.yml`) copies the data every
+Vercel; `vercel.json` sets the security headers (a strict Content Security
+Policy) and caching, and the local test server applies the same headers. A GitHub Action (`.github/workflows/daily.yml`) copies the data every
 morning at 06:02 Nepal time, checks it and commits it, which triggers a redeploy.
 
 ## How it is put together

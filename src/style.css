@@ -40,6 +40,12 @@ button, input, select { font: inherit; color: inherit; }
 .lang:hover { background: var(--wash); }
 .disclaimer { margin: 0; padding: 7px 20px 8px 17px; border-left: 3px solid var(--amber); border-top: 1px solid var(--line); font-size: 14px; color: var(--ink); background: #fbf6ea; }
 .disclaimer .short { display: none; }
+.nogl #gl, .nogl .margin, .nogl .legend { display: none !important; }
+.nogl #stage { display: flex; align-items: flex-end; }
+.nogl-note { margin: auto 16px 32px; max-width: 30rem; padding: 12px 16px; border-left: 3px solid var(--ink); background: var(--paper); border-radius: 0 10px 10px 0; font-size: 15px; }
+@media (max-width: 860px) { .nogl #stage { height: auto; min-height: 0; padding-top: 72px; } .nogl-note { margin: 0 14px 34px; } }
+.sharelink { width: 100%; margin-top: 8px; padding: 8px 10px; border: 1px solid var(--line-strong); border-radius: 8px; font: inherit; font-size: 13px; }
+.report img.shot:not([src]), .report img.shot[src=""] { display: none; }
 
 /* ---------- stage: the relief model ---------- */
 main { position: relative; height: calc(100dvh - var(--hdr)); }
