@@ -34,6 +34,8 @@ phones, works in both languages, and prints a clean report.
   water depth as ranges.
 - **What if a big earthquake hits?** Choose the epicentre, magnitude and fault
   direction; see the likely shaking band for all 77 districts.
+- **Share a scenario:** the link holds the lake and volume, or the epicentre,
+  magnitude and fault direction, so whoever opens it sees the same result.
 - **Printable reports:** a north-up map with scale and legend, key figures, an
   arrival-time chart, and the full table, on two A4 pages.
 - **Installs like an app:** add it to the home screen from the browser menu.

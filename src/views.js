@@ -23,6 +23,20 @@ function mapIntoView() {
     scrollTo({ top: 0, behavior: REDUCED ? 'auto' : 'smooth' });
   });
 }
+// Scenario links: the address holds the scenario (#/glof/<lake id>/<from>-<to>, #/quake/<lat>,<lon>/<M>/<strike>),
+// kept up to date without a page change, so a copied link reopens exactly what is on screen.
+const setHash = (h) => { if (location.hash !== h) history.replaceState(null, '', h); };
+const hashParts = () => location.hash.split('/').slice(2).map(decodeURIComponent);
+const shareBtn = () => `<button class="btn ghost" type="button" id="share">${t('share')}</button>`;
+function wireShare(root) {
+  const b = root.querySelector('#share'); if (!b) return;
+  b.onclick = async () => {
+    const url = location.href;
+    if (navigator.share && phone()) { try { await navigator.share({ title: document.title, url }); return; } catch (e) { if (e.name === 'AbortError') return; } }
+    try { await navigator.clipboard.writeText(url); b.textContent = t('copied'); setTimeout(() => (b.textContent = t('share')), 2000); }
+    catch { b.insertAdjacentHTML('afterend', `<input class="sharelink" readonly value="${esc(url)}" aria-label="${t('share')}">`); b.nextElementSibling.select(); }
+  };
+}
 
 // ---------- shared bits ----------
 // The "edition" block: how old every dataset is, like the edition note on a survey sheet.
@@ -341,7 +355,12 @@ const glofView = {
     showChips(false, this.layers); map.clearShaking();
     await lakesReady; if (!live()) return;
     const first = LAKES.find((l) => l.en === 'Tsho Rolpa');
+    // a shared link: #/glof/<lake id>/<from>-<to> opens that lake and runs it
+    const [lid, lv] = hashParts(), linked = lid && LAKES.find((l) => l.id === lid);
+    const vols = (lv || '').split('-').map(Number), linkVol = vols.length === 2 && vols.every((v) => v >= 0.1 && v <= 500) && vols[0] <= vols[1] ? vols : null;
+    if (linked) G = { lake: linked, vol: linkVol || (linked.vol ? linked.vol.slice() : null), res: null, t: 0, playing: false, last: 0 };
     G ??= { lake: first, vol: first.vol.slice(), res: null, t: 0, playing: false, last: 0 };
+    const syncLink = () => setHash(`#/glof/${G.lake.id}${G.vol ? `/${G.vol[0]}-${G.vol[1]}` : ''}`);
     el.innerHTML = `<h1>${t('glof.h')}</h1><p class="lead">${t('glof.lead')}</p>
       <div class="noprint">
         <div class="row"><label class="f">${t('glof.lake')}<select id="lake">${lakeOptions()}</select></label></div>
@@ -363,15 +382,16 @@ const glofView = {
         : G.lake.frozen ? t('lake.frozenNote')
         : G.lake.volSrc === 'area' ? (lang === 'ne' ? 'पूर्वनिर्धारित दायरा: स्याटेलाइटबाट नापिएको क्षेत्रफलबाट अनुमान (Huggel र अन्य २००२) को ०.७ देखि १.५ गुणा। आफू चाहे बदल्न सक्नुहुन्छ।' : 'Default range: 0.7 to 1.5 times the estimate from the satellite-measured area (Huggel et al. 2002). You can change it.') + (G.lake.area > 2 ? ' ' + t('lake.bigNote') : '') : t('lake.volNone');
     };
-    G.select = (l) => { G.lake = l; G.vol = l.vol ? l.vol.slice() : null; showLake(); map.setMarker(l.ll, LAKE_RANK_COLOR[l.rank]); map.flyTo(...l.ll, 200); routeFor(l.ll); };
+    G.select = (l) => { G.lake = l; G.vol = l.vol ? l.vol.slice() : null; showLake(); syncLink(); map.setMarker(l.ll, LAKE_RANK_COLOR[l.rank]); map.flyTo(...l.ll, 200); routeFor(l.ll); };
     sel.onchange = () => G.select(LAKES.find((x) => x.id === sel.value));
     el.querySelector('#run').onclick = () => {
       if (!(+v0.value > 0) || !(+v1.value > 0)) { el.querySelector('#volnote').textContent = t('lake.needVol'); v0.focus(); return; }
-      const a = Math.max(0.1, +v0.value), b = Math.max(a, +v1.value); G.vol = [a, b]; v0.value = a; v1.value = b; run(el, live);
+      const a = Math.max(0.1, +v0.value), b = Math.max(a, +v1.value); G.vol = [a, b]; v0.value = a; v1.value = b; syncLink(); run(el, live);
     };
-    showLake();
+    showLake(); syncLink();
     routeFor(G.lake.ll);
     await dataReady; if (!live()) return;
+    if (linked && G.vol && !G.res) { run(el, live); return; }
     if (G.res) showResult(el);
     await mapReady; if (!live()) return;
     map.setMarker(G.lake.ll, LAKE_RANK_COLOR[G.lake.rank]);
@@ -451,7 +471,8 @@ function showResult(el) {
     <h3>${t('assumptions')}</h3>
     <ul class="note"><li>${A.peakLow}; ${A.peakHigh}</li><li>Manning n ${A.manningN.join('–')}; width = (${A.widthCoef.join('–')})·√Q; peak decay length ${A.attenuationKm.join('–')} km; flood front ≤ ${A.maxCelerity} m/s</li>
     <li>${lang === 'ne' ? 'स्थानीय तहको केन्द्रबिन्दु बाटोबाट ५ कि.मि. भित्र भए मात्र तालिकामा देखिन्छ।' : 'A local level is listed when its centre is within 5 km of the path.'}</li></ul>
-    <p class="noprint"><button class="btn ghost" type="button" id="pr">${t('print')}</button></p>`;
+    <p class="noprint row">${shareBtn()}<button class="btn ghost" type="button" id="pr">${t('print')}</button></p>`;
+  wireShare(out);
   // print the whole flooded path (not the moment the timeline is at), then put the timeline back
   out.querySelector('#pr').onclick = () => doPrint(boundsOf(res.map((q) => q.ll)), () => { map.setPathTime(-1); map.hideFronts(); }, () => { map.setPathTime(G.t); syncFronts(); });
   out.querySelector('#play').onclick = async () => {
@@ -468,7 +489,14 @@ const quakeView = {
   hideLayers: true,
   async enter(el, live) {
     showChips(false, []); map.clearPath();
-    Q ??= { M: 7.8, strike: 290, ll: [84.731, 28.231], label: { en: '2015 Gorkha epicentre (Barpak)', ne: '२०७२ गोरखा भूकम्पको केन्द्र (बारपाक)' }, r: 0, animating: false };
+    const BARPAK = { en: '2015 Gorkha epicentre (Barpak)', ne: '२०७२ गोरखा भूकम्पको केन्द्र (बारपाक)' };
+    // a shared link: #/quake/<lat>,<lon>/<M>/<strike>
+    const [qll, qm, qs] = hashParts(), [lat, lon] = (qll || '').split(',').map(Number);
+    if (lat >= BOX.s - 1 && lat <= BOX.n + 1 && lon >= BOX.w - 1 && lon <= BOX.e + 1 && +qm >= 5 && +qm <= 8.6) {
+      const ll = [lon, lat], near = state.places.find((p) => Math.abs(p.ll[0] - lon) < 5e-4 && Math.abs(p.ll[1] - lat) < 5e-4);
+      Q = { M: Math.round(+qm * 10) / 10, strike: (((Math.round(+qs) || 0) % 360) + 360) % 360, ll, label: near || (lon === 84.731 && lat === 28.231 ? BARPAK : null), r: 0, animating: false };
+    }
+    Q ??= { M: 7.8, strike: 290, ll: [84.731, 28.231], label: BARPAK, r: 0, animating: false };
     el.innerHTML = `<h1>${t('quake.h')}</h1><p class="lead">${t('quake.lead')}</p>
       <div class="noprint">
         <dl class="callout scenario" style="--sel:${SCENARIO.ink};animation:none"><dt>${t('quake.epi')}</dt><dd id="epi"></dd></dl><p class="note">${t('quake.tap')}</p>
@@ -485,6 +513,8 @@ const quakeView = {
     legend();
     mapReady.then(() => live() && map.flyTo(...Q.ll, 420));
     await Promise.all([engine(), dataReady]); if (!live()) return;
+    // a shared epicentre on a place: show its name (places load with the data)
+    if (!Q.label) Q.label = state.places.find((p) => Math.abs(p.ll[0] - Q.ll[0]) < 5e-4 && Math.abs(p.ll[1] - Q.ll[1]) < 5e-4) || null;
     update(true);
   },
   onPick({ ground, item }) { const ll = ground || item?.ll; if (!ll) return; Q.ll = ll; Q.label = null; update(true); },
@@ -516,6 +546,7 @@ async function update(animate) {
 }
 function renderQuakeTable() {
   const el = document.getElementById('out'); if (!el) return;
+  setHash(`#/quake/${Q.ll[1].toFixed(3)},${Q.ll[0].toFixed(3)}/${Q.M}/${Q.strike}`);
   document.getElementById('mo').textContent = num(Q.M, 1);
   document.getElementById('epi').textContent = Q.label ? name(Q.label) : `${num(Q.ll[1], 3)}°N, ${num(Q.ll[0], 3)}°E`;
   const dist = state.places.filter((p) => p.t === 'd').map((d) => ({ d, b: js.shakingAt(Q, ...d.ll) })).sort((x, y) => y.b[1] - x.b[1]);
@@ -537,7 +568,8 @@ function renderQuakeTable() {
     <table class="noprint"><thead><tr><th>${t('quake.district')}</th><th>${t('quake.band')}</th><th></th></tr></thead><tbody>
     ${dist.map(({ d, b }) => `<tr><td>${esc(name(d))}</td><td class="n">${mmiBand(b[0], b[2])}</td><td>${mmiWord(b[1])}</td></tr>`).join('')}</tbody></table>
     <h3>${t('assumptions')}</h3><ul class="note"><li>${A.model}</li><li>${A.rupture}: ${num(js.ruptureKm(Q.M))} ${t('km')}</li><li>±${A.spread} ${lang === 'ne' ? 'तीव्रता तह अनिश्चितता (अनुमानित)' : 'intensity level model spread (assumed)'}; ${lang === 'ne' ? 'माटो र उपत्यकाको प्रभाव समावेश छैन' : 'soil and basin effects not included'}</li></ul>
-    <p class="noprint"><button class="btn ghost" type="button" id="pr">${t('print')}</button></p>`;
+    <p class="noprint row">${shareBtn()}<button class="btn ghost" type="button" id="pr">${t('print')}</button></p>`;
+  wireShare(el);
   el.querySelector('#pr').onclick = () => doPrint(undefined, () => { Q.animating = false; map.setShakeRadius((Q.r = 800)); });
 }
 

@@ -108,6 +108,15 @@ for (const tab of ['incidents', 'quakes']) {
   const st = await p.evaluate(() => ({ y: scrollY, t: document.getElementById('tout')?.textContent, play: document.getElementById('play')?.textContent }));
   ok(y0 > 100 && st.y === 0 && /Pause/.test(st.play), `phone: Run scrolls up to the map, then the flood plays (scrolled from ${y0} to ${st.y}; ${st.play}, ${st.t})`);
   await ctx.close(); }
+// shared links reopen the exact scenario
+{ const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } }); const p = await ctx.newPage();
+  await p.goto(BASE + '#/glof/GL086925E27898N/20-35'); await p.waitForSelector('#out tbody tr', { timeout: 30000 });
+  const g = await p.evaluate(() => [document.getElementById('lake').value, document.getElementById('v0').value, document.getElementById('v1').value]);
+  ok(g.join() === 'GL086925E27898N,20,35', `a lake-burst link opens that lake and volume and runs it (${g})`);
+  await p.goto(BASE + '#/quake/27.700,85.300/6.9/120'); await p.waitForSelector('#out tbody tr', { timeout: 30000 });
+  const q = await p.evaluate(() => [document.getElementById('mo').textContent, document.getElementById('S').value, location.hash]);
+  ok(q[0] === '6.9' && q[1] === '120' && q[2] === '#/quake/27.700,85.300/6.9/120', `an earthquake link opens that epicentre, magnitude and direction (${q})`);
+  await ctx.close(); }
 // failure cases: no WebGL (old phones, locked-down browsers) and data that fails to load
 { const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   await ctx.addInitScript(() => { const g = HTMLCanvasElement.prototype.getContext; HTMLCanvasElement.prototype.getContext = function (t, ...a) { return /webgl/.test(t) ? null : g.call(this, t, ...a); }; });
