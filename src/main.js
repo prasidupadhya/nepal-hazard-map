@@ -33,12 +33,18 @@ $('#lang').onclick = () => { setLang(lang === 'en' ? 'ne' : 'en'); try { localSt
 // ---------- layer chips ----------
 function chips() {
   $('#chips').setAttribute('aria-label', t('key'));
-  $('#chips').innerHTML = Object.keys(state.layers).map((k) => `<button type="button" data-l="${k}" aria-pressed="${state.layers[k]}">${sw(k)}${t('layers.' + k)}</button>`).join('');
+  // on phones the key folds into one "Layers" button so it does not cover the small map
+  const on = Object.values(state.layers).filter(Boolean).length;
+  $('#chips').innerHTML = `<button type="button" class="key-toggle" aria-expanded="false">${t('key')} <span class="count">${num(on)}</span></button>`
+    + Object.keys(state.layers).map((k) => `<button type="button" data-l="${k}" aria-pressed="${state.layers[k]}">${sw(k)}${t('layers.' + k)}</button>`).join('');
   $('#northbtn').setAttribute('aria-label', t('north')); $('#northbtn').title = t('north');
 }
 $('#chips').onclick = (e) => {
+  const tg = e.target.closest('.key-toggle');
+  if (tg) { const open = $('#chips').classList.toggle('open'); tg.setAttribute('aria-expanded', open); return; }
   const b = e.target.closest('[data-l]'); if (!b) return;
   const k = b.dataset.l; state.layers[k] = !state.layers[k]; b.setAttribute('aria-pressed', state.layers[k]); map.showLayer(k, state.layers[k]);
+  $('#chips .key-toggle .count').textContent = num(Object.values(state.layers).filter(Boolean).length);
 };
 // The map key and the user's layer choices apply on the map view; scenario screens pass the layers they need.
 export function showChips(on, only) { $('#chips').hidden = !on; map.setNetworkMin(only ? 1000 : 0); for (const k in state.layers) map.showLayer(k, only ? only.includes(k) : on && state.layers[k]); }
