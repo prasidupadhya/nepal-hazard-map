@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: In danger now? Follow official alerts
+    url: https://bipadportal.gov.np
+    about: This project is not an official warning service. For alerts follow DHM, NEMRC, the Nepal Government and local authorities. In an emergency call Police 100, Fire 101 or Ambulance 102.
+  - name: Report a security problem privately
+    url: https://github.com/prasidupadhya/nepal-hazard-map/security/advisories/new
+    about: Please don't open a public issue for security problems.

@@ -1,0 +1,24 @@
+name: Data problem
+description: A wrong, missing or out-of-date number, place name, lake, river or translation
+labels: [data]
+body:
+  - type: markdown
+    attributes:
+      value: The site only shows data it can trace to a source, so please include one.
+  - type: input
+    id: where
+    attributes:
+      label: Where on the site
+      placeholder: e.g. Latest data → Rivers → Koshi at Chatara
+    validations: { required: true }
+  - type: textarea
+    id: wrong
+    attributes:
+      label: What it shows now, and what it should show
+    validations: { required: true }
+  - type: textarea
+    id: source
+    attributes:
+      label: Source for the correct value
+      description: A link to the official page, report, paper or satellite scene.
+    validations: { required: true }

@@ -2,6 +2,10 @@
 name = "scenario"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
+description = "Scenario maths (GLOF routing, earthquake shaking) for Nepal Hazard Map, compiled to WebAssembly"
+repository = "https://github.com/prasidupadhya/nepal-hazard-map"
+publish = false
 
 [lib]
 crate-type = ["cdylib"]

@@ -1,0 +1,36 @@
+name: Bug
+description: Something on the site doesn't work or looks broken
+labels: [bug]
+body:
+  - type: input
+    id: page
+    attributes:
+      label: Page or link
+      placeholder: https://nepal-hazard-map.vercel.app/#/glof
+    validations: { required: true }
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations: { required: true }
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to make it happen again
+      placeholder: "1. Open the Lake burst page\n2. Choose Imja Tsho\n3. ..."
+  - type: input
+    id: device
+    attributes:
+      label: Device and browser
+      placeholder: e.g. Redmi Note 10, Chrome 131
+    validations: { required: true }
+  - type: dropdown
+    id: lang
+    attributes:
+      label: Language
+      options: [English, नेपाली, Both]
+  - type: textarea
+    id: shots
+    attributes:
+      label: Screenshots
+      description: Drag images here if you can.
