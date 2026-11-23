@@ -1,6 +1,7 @@
 import { T, t, setLang, lang, name, num } from './i18n.js';
 import { map, mapModule } from './map.js';
 import { VIEWS, lakesReady } from './views.js';
+import { ROUTE, D8, cellLL } from './grid.js';
 
 // The river network is the only layer on at first; the rest are a tap away in the map key.
 export const state = { latest: null, places: [], rivers: null, layers: { network: true, lakes: false, rivers: false, rain: false, quakes: false, incidents: false }, view: null };
@@ -146,7 +147,7 @@ function simplify(pts, tol) {
 }
 // river network from public/terrain/rivers.json (start cell + D8 codes per reach)
 async function decodeRivers(url) {
-  const j = await (await fetch(url)).json(), { ROUTE, D8, cellLL } = await import('./grid.js');
+  const j = await (await fetch(url)).json();
   j.polys = j.lines.map(([start, codes, km2]) => {
     let i = start % ROUTE.nx, jj = Math.floor(start / ROUTE.nx); const pts = [cellLL(ROUTE, i, jj)], cells = [start];
     for (const c of codes) { i += D8[c - 1][0]; jj += D8[c - 1][1]; pts.push(cellLL(ROUTE, i, jj)); cells.push(jj * ROUTE.nx + i); }
