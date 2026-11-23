@@ -55,8 +55,8 @@ async function tilePixels(url) {
   return { w: bmp.width, h: bmp.height, rgb: c.getImageData(0, 0, bmp.width, bmp.height).data };
 }
 const loadTiles = makeRouteLoader((tx, ty) => tilePixels(`terrain/route/${tx}_${ty}.png`), () => fetch('terrain/route/index.json').then((r) => r.json()));
-async function routeFor(ll, toEdge = false) {
-  const [{ grid, added }, w] = await Promise.all([loadTiles(...ll, toEdge), engine()]);
+async function routeFor(ll) {
+  const [{ grid, added }, w] = await Promise.all([loadTiles(...ll), engine()]);
   if (w && added) w.setRoute(grid);
   return grid;
 }
@@ -98,8 +98,8 @@ function lakesThrough(cell) {
 }
 async function traceRiver(el, ll, live) {
   el.innerHTML = `<div class="callout"><p class="note">${t('loading')}</p></div>`;
-  const grid = await routeFor(ll, true); await lakesReady; if (!live()) return;
-  const path = js.tracePath(grid, ...ll, 6000, false); // follow the river across the plains to the map edge
+  const grid = await routeFor(ll); await lakesReady; if (!live()) return;
+  const path = js.tracePath(grid, ...ll); // follows the river to where it leaves Nepal
   const cell = Math.floor((30.5 - ll[1]) / ROUTE.step) * ROUTE.nx + Math.floor((ll[0] - 79.9) / ROUTE.step);
   // a gauge counts only if its nearest mapped river cell lies on this path (gauges just up a tributary do not)
   const onPath = new Map(), pathCells = path.map((q) => Math.floor((30.5 - q.ll[1]) / ROUTE.step) * ROUTE.nx + Math.floor((q.ll[0] - 79.9) / ROUTE.step));
@@ -353,7 +353,7 @@ function placesAlong(res) {
     for (const q of res) { const d = Math.hypot((q.ll[0] - p.ll[0]) * 98, (q.ll[1] - p.ll[1]) * 111.32); if (d < bd) { bd = d; best = q; } }
     if (best && !seen.has(p.en)) { seen.add(p.en); out.push({ p, q: best }); }
   }
-  out.push({ p: { en: 'End of model path (plains)', ne: 'मोडेल बाटोको अन्त्य (समथर भूभाग)', t: 'end' }, q: res.at(-1) });
+  out.push({ p: { en: 'Nepal border', ne: 'नेपालको सिमाना', t: 'end' }, q: res.at(-1) });
   return out.sort((a, b) => a.q.km - b.q.km);
 }
 function syncTime() { const o = document.getElementById('tout'), s = document.getElementById('tslider'); if (o) o.textContent = fmtH(G.t); if (s) { s.value = G.t; fill(s); } }
@@ -367,7 +367,7 @@ function showResult(el) {
       <input id="tslider" type="range" min="0" max="${end}" step="any" aria-label="${t('glof.time')}"><output id="tout"></output></div>
     <p class="fronts noprint"><span style="--c:${SCENARIO.ink}">${lang === 'ne' ? 'छिटो आइपुग्ने अग्रभाग' : 'Earliest front'}</span><span style="--c:${SCENARIO.late};--o:${SCENARIO.ink}">${lang === 'ne' ? 'ढिलो आइपुग्ने अग्रभाग' : 'Latest front'}</span></p>
     <div class="tw"><table><thead><tr><th>${t('glof.place')}</th><th>${t('glof.dist')}</th><th>${t('glof.arrival')}</th><th>${t('glof.peak')}</th><th>${t('glof.depth')}</th></tr></thead>
-    <tbody>${rows.map(({ p, q }) => `<tr><td>${esc(name(p))}</td><td class="n">${num(q.km)} ${t('km')}</td><td>${fmtH(q.arrivalH[0])} – ${fmtH(q.arrivalH[1])}</td><td class="n">${num(Math.round(q.peak[0] / 10) * 10)} – ${num(Math.round(q.peak[1] / 10) * 10)}</td><td class="n">${num(q.depth[0], 1)} – ${num(q.depth[1], 1)}</td></tr>`).join('')}</tbody></table></div>
+    <tbody>${rows.map(({ p, q }) => `<tr><td>${esc(name(p))}${q.z < js.PLAINS_M ? ' *' : ''}</td><td class="n">${num(q.km)} ${t('km')}</td><td>${fmtH(q.arrivalH[0])} – ${fmtH(q.arrivalH[1])}</td><td class="n">${num(Math.round(q.peak[0] / 10) * 10)} – ${num(Math.round(q.peak[1] / 10) * 10)}</td><td class="n">${num(q.depth[0], 1)} – ${num(q.depth[1], 1)}</td></tr>`).join('')}</tbody></table></div>
     <p class="note">${t('glof.ends')}</p>
     <h3>${t('assumptions')}</h3>
     <ul class="note"><li>${A.peakLow}; ${A.peakHigh}</li><li>Manning n ${A.manningN.join('–')}; width = (${A.widthCoef.join('–')})·√Q; peak decay length ${A.attenuationKm.join('–')} km; flood front ≤ ${A.maxCelerity} m/s</li>

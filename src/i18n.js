@@ -18,7 +18,7 @@ export const T = {
       tap: 'Tap a river, or anywhere on the land, to follow the water downstream.', traceBtn: 'Trace downstream from this gauge', unnamed: 'River', becomes: 'Named along the way',
       length: 'Followed for', drop: 'Height', from: 'from', to: 'to', gauges: 'River gauges downstream', noGauges: 'No river gauge on this stretch.',
       lakesUp: 'Dangerous glacial lakes upstream', lakesNote: 'An outburst from any of these lakes would flow past this point.', noLakes: 'No dangerous glacial lake drains through this point.',
-      near: 'Passes near', ends: 'River directions: HydroSHEDS (Lehner et al. 2008), conditioned with mapped river lines so they hold across the flat Terai. The trace runs to the edge of this map.',
+      near: 'Passes near', ends: 'River directions: HydroSHEDS (Lehner et al. 2008), conditioned with mapped river lines so they hold across the flat Terai. The trace ends where the river leaves Nepal.',
     },
     lake: {
       rank: 'Danger rank', area: 'Water area', rankI: 'I, highest', rankII: 'II', rankIII: 'III', basin: 'River', country: 'Located in', id: 'ICIMOD lake ID',
@@ -51,7 +51,7 @@ export const T = {
       lake: 'Lake', volume: 'Water released (million m³)', from: 'from', to: 'to',
       run: 'Run scenario', play: 'Play', pause: 'Pause', time: 'Hours after burst',
       result: 'Result', place: 'Place on the path', dist: 'Distance', arrival: 'Arrival (earliest – latest)', peak: 'Peak flow (m³/s)', depth: 'Water depth (m)',
-      ends: 'The path ends where the river reaches the plains (below 120 m). There, water spreads out and this model cannot say where it goes.',
+      ends: 'The path follows the river to the Nepal border. * On the flat plains (below 120 m) the flood spreads out sideways, so times and depths there are rougher estimates.',
       tap: 'Or tap a lake circle on the map.',
     },
     quake: {
@@ -82,7 +82,7 @@ export const T = {
       tap: 'पानी तल्लो भागतर्फ कहाँ जान्छ हेर्न नदी वा जमिनको कुनै पनि ठाउँमा थिच्नुहोस्।', traceBtn: 'यो केन्द्रबाट तल्लो भागतर्फ पछ्याउनुहोस्', unnamed: 'नदी', becomes: 'बाटोमा पर्ने नाम',
       length: 'पछ्याइएको दूरी', drop: 'उचाइ', from: 'देखि', to: 'सम्म', gauges: 'तल्लो भागका नदी मापन केन्द्र', noGauges: 'यो खण्डमा नदी मापन केन्द्र छैन।',
       lakesUp: 'माथिल्लो भागका खतरनाक हिमताल', lakesNote: 'यीमध्ये कुनै हिमताल फुटेमा बाढी यही बिन्दु भएर बग्छ।', noLakes: 'यो बिन्दु भएर कुनै खतरनाक हिमतालको पानी बग्दैन।',
-      near: 'नजिकैबाट जान्छ', ends: 'नदीको दिशा: HydroSHEDS (Lehner र अन्य, २००८), नक्सांकित नदी रेखासँग मिलाइएको, त्यसैले समथर तराईमा पनि भरपर्दो। नक्साको किनारासम्म पछ्याइन्छ।',
+      near: 'नजिकैबाट जान्छ', ends: 'नदीको दिशा: HydroSHEDS (Lehner र अन्य, २००८), नक्सांकित नदी रेखासँग मिलाइएको, त्यसैले समथर तराईमा पनि भरपर्दो। नदी नेपालबाट बाहिरिने ठाउँमा बाटो रोकिन्छ।',
     },
     lake: {
       rank: 'खतराको श्रेणी', area: 'पानीको क्षेत्रफल', rankI: 'I, सबैभन्दा उच्च', rankII: 'II', rankIII: 'III', basin: 'नदी', country: 'अवस्थिति', id: 'ICIMOD हिमताल परिचय',
@@ -115,7 +115,7 @@ export const T = {
       lake: 'हिमताल', volume: 'निस्कने पानी (दस लाख घन मिटर)', from: 'देखि', to: 'सम्म',
       run: 'परिदृश्य चलाउनुहोस्', play: 'चलाउनुहोस्', pause: 'रोक्नुहोस्', time: 'फुटेपछिको घण्टा',
       result: 'नतिजा', place: 'बाटोको ठाउँ', dist: 'दूरी', arrival: 'आइपुग्ने समय (छिटो – ढिलो)', peak: 'उच्चतम बहाव (घन मि./से.)', depth: 'पानीको गहिराइ (मि.)',
-      ends: 'नदी समथर भूभाग (१२० मिटरभन्दा तल) पुगेपछि बाटो रोकिन्छ। त्यहाँ पानी फैलिन्छ र यो मोडेलले दिशा भन्न सक्दैन।',
+      ends: 'बाटो नेपालको सिमानासम्म नदी पछ्याउँछ। * समथर भूभाग (१२० मिटरभन्दा तल) मा बाढी छेउतिर फैलिन्छ, त्यसैले त्यहाँको समय र गहिराइ मोटामोटी अनुमान हुन्।',
       tap: 'वा नक्सामा हिमतालको गोलो थिच्नुहोस्।',
     },
     quake: {

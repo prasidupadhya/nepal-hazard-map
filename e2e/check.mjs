@@ -60,7 +60,7 @@ for (const [lang, want] of [['en', 'Kathmandu'], ['ne', 'काठमाडौ']
 await page.goto(BASE + '#/glof'); await page.waitForSelector('#run'); await page.click('#run');
 await page.waitForSelector('#out table tbody tr', { timeout: 30000 });
 const rows = await page.$$eval('#out tbody tr', (t) => t.map((r) => r.innerText));
-ok(rows.length >= 3 && rows.some((r) => /Plains|plains/.test(r)), `GLOF table has ${rows.length} rows ending at plains`);
+ok(rows.length >= 3 && /Nepal border/.test(rows.at(-1)), `GLOF table has ${rows.length} rows ending at the Nepal border`);
 ok(rows.every((r) => /–/.test(r)), 'every GLOF row shows ranges');
 await page.emulateMedia({ media: 'print' });
 const pv = await page.evaluate(() => ({ stage: getComputedStyle(document.querySelector('#stage')).display, nav: getComputedStyle(document.querySelector('#nav')).display, po: getComputedStyle(document.querySelector('.print-only')).display, disc: getComputedStyle(document.querySelector('.disclaimer')).display }));

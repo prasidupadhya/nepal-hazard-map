@@ -19,21 +19,27 @@ export const ASSUMPTIONS = {
 export const peakEvans = (vM3) => 0.72 * vM3 ** 0.53;
 export const peakHuggel = (vM3) => 0.00077 * vM3 ** 1.017;
 
-// Follow D8 flow directions downstream. Flood scenarios stop at the plains (below PLAINS_M):
-// there a flood wave spreads sideways and a one-dimensional model no longer holds.
-// River traces (toPlains = false) continue along the river to the edge of the map.
+// Follow D8 flow directions downstream until the water leaves Nepal. The routing grid stores the direction in
+// the low bits (1–8) and NEPAL_BIT for cells inside Nepal. A path that has been in Nepal ends once it has been
+// outside for more than BORDER_TOL cells (border rivers such as the Mahakali weave across the line); the outside
+// cells are then trimmed, so the path ends at the border. Any path also ends in the Indian plains (below 400 m)
+// once it is more than ~5 km from Nepal (NEAR_BIT clear): those places are outside this map's subject.
+export const NEPAL_BIT = 16, NEAR_BIT = 32, BORDER_TOL = 6;
+// Below this height the land is flat plains: a flood wave spreads sideways there, so the scenario flags those places.
 export const PLAINS_M = 120;
-export function tracePath(route, lon, lat, maxSteps = 6000, toPlains = true) {
+export function tracePath(route, lon, lat, maxSteps = 6000) {
   const { nx, ny, dir, elev } = route;
   let i = Math.floor((lon - BOX.w) / ROUTE.step), j = Math.floor((BOX.n - lat) / ROUTE.step);
-  const pts = []; let km = 0;
+  const pts = []; let km = 0, entered = false, out = 0;
   for (let s = 0; s < maxSteps && i >= 0 && j >= 0 && i < nx && j < ny; s++) {
-    const k = j * nx + i, [lo, la] = cellLL(ROUTE, i, j);
+    const k = j * nx + i, [lo, la] = cellLL(ROUTE, i, j), inside = (dir[k] & NEPAL_BIT) > 0;
     if (pts.length) { const p = pts.at(-1); km += Math.hypot((lo - p.ll[0]) * kmPerDegLon(la), (la - p.ll[1]) * KM_PER_DEG_LAT); }
-    pts.push({ ll: [lo, la], km, z: elev[k] });
-    const d = dir[k]; if (!d || (toPlains && elev[k] < PLAINS_M)) break;
+    pts.push({ ll: [lo, la], km, z: elev[k], nepal: inside });
+    if (inside) { entered = true; out = 0; } else if ((entered && ++out > BORDER_TOL) || (!(dir[k] & NEAR_BIT) && elev[k] < 400)) break;
+    const d = dir[k] & 15; if (!d) break;
     i += D8[d - 1][0]; j += D8[d - 1][1];
   }
+  if (entered) while (pts.length > 1 && !pts.at(-1).nepal) pts.pop(); // end exactly at the border
   return pts;
 }
 
@@ -57,7 +63,7 @@ export function glof(path, volMm3, opt = ASSUMPTIONS.glof) {
     const qLo = QpLo * Math.exp(-p.km / LLo), qHi = QpHi * Math.exp(-p.km / LHi);
     const fast = hydraulics(qHi, nLo, aLo, S), slow = hydraulics(qLo, nHi, aHi, S);
     if (k) { const dx = (p.km - path[k - 1].km) * 1000; tFast += dx / fast.c; tSlow += dx / slow.c; }
-    out.push({ km: p.km, ll: p.ll, z: p.z, arrivalH: [tFast / 3600, tSlow / 3600], peak: [qLo, qHi],
+    out.push({ km: p.km, ll: p.ll, z: p.z, nepal: p.nepal, arrivalH: [tFast / 3600, tSlow / 3600], peak: [qLo, qHi],
       depth: [hydraulics(qLo, nLo, aHi, S).h, hydraulics(qHi, nHi, aLo, S).h] });
   }
   return out;

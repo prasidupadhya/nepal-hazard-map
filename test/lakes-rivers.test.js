@@ -48,8 +48,8 @@ describe('glacial lakes (ICIMOD 2020, Table 5.6)', () => {
       if (l.country[0] === 'Tibet, China' && crossing[l.basin[0]]) expect(near(p[k].ll, crossing[l.basin[0]], 4), l.id).toBe(true);
     }
   });
-  it('baked lake paths in rivers.json equal the live routing (to the map edge)', () => {
-    for (const l of LAKES) expect(decode(...R.lakes[l.id]).map((c) => cellLL(ROUTE, c % ROUTE.nx, Math.floor(c / ROUTE.nx)))).toEqual(tracePath(route, ...l.ll, 6000, false).map((q) => q.ll));
+  it('baked lake paths in rivers.json equal the live routing (to the Nepal border)', () => {
+    for (const l of LAKES) expect(decode(...R.lakes[l.id]).map((c) => cellLL(ROUTE, c % ROUTE.nx, Math.floor(c / ROUTE.nx)))).toEqual(tracePath(route, ...l.ll).map((q) => q.ll));
   });
 });
 
@@ -58,7 +58,7 @@ describe('river network (rivers.json)', () => {
     const all = new Set(); for (const [s, c] of R.lines) decode(s, c).forEach((x) => all.add(x));
     for (const [s, c] of R.lines) {
       const cells = decode(s, c);
-      for (let k = 0; k + 1 < cells.length; k++) { const [dx, dy] = D8[route.dir[cells[k]] - 1]; expect(cells[k + 1]).toBe(cells[k] + dy * ROUTE.nx + dx); }
+      for (let k = 0; k + 1 < cells.length; k++) { const [dx, dy] = D8[(route.dir[cells[k]] & 15) - 1]; expect(cells[k + 1]).toBe(cells[k] + dy * ROUTE.nx + dx); }
     }
     expect(R.lines.length).toBeGreaterThan(200);
   });
