@@ -1,30 +1,36 @@
 name: Copy data
+# Once a day: copy the latest official data, check it, and commit it to main (Vercel redeploys on that push).
 on:
   schedule:
     - cron: '17 0 * * *'   # every day 00:17 UTC = 06:02 Nepal Time
   workflow_dispatch:
-  push:
-    branches: [main]
 permissions:
-  contents: write
+  contents: read
+concurrency:
+  group: daily-data
+  cancel-in-progress: false
 jobs:
   data:
+    # only in the main repository, never in forks
+    if: github.repository == 'prasidupadhya/nepal-hazard-map'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
-        with: { node-version: 22, cache: npm }
+        with: { node-version-file: .nvmrc, cache: npm }
       - run: npm ci
       - name: Copy latest official data
-        if: github.event_name != 'push'
         run: node scripts/fetch-data.js
       - name: Build WebAssembly
         run: rustup target add wasm32-unknown-unknown && npm run wasm
+      # nothing is saved unless the new copy passes the tests and builds
       - run: npm test
       - run: npm run build
       # Committing the copy keeps the archive growing; Vercel redeploys on this push.
       - name: Save the copy
-        if: github.event_name != 'push'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
