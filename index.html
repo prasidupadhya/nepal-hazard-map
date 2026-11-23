@@ -6,7 +6,24 @@
 <title>Nepal Hazard Map</title>
 <meta name="description" content="Floods, glacial lake outbursts and earthquakes in Nepal: daily copies of official data (DHM, BIPAD, NEMRC) on a 3D relief model, with what-if scenarios. Not an official warning.">
 <meta name="theme-color" content="#E7ECEA">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M2 25 11 11l4 5 6-9 9 18z' fill='%231B2A32'/%3E%3Cpath d='M2 27h28' stroke='%230A6787' stroke-width='2'/%3E%3C/svg%3E">
+<link rel="canonical" href="https://nepal-hazard-map.vercel.app/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Nepal Hazard Map">
+<meta property="og:title" content="Nepal Hazard Map: floods, glacial lakes and earthquakes">
+<meta property="og:description" content="Today's official river, rain and earthquake data for Nepal on a 3D map, with what-if scenarios for glacial lake outbursts and earthquakes. English and Nepali. Not an official warning.">
+<meta property="og:url" content="https://nepal-hazard-map.vercel.app/">
+<meta property="og:image" content="https://nepal-hazard-map.vercel.app/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="A relief map of Nepal with rivers and place names, titled Nepal Hazard Map: floods, glacial lakes and earthquakes. Not an official warning.">
+<meta property="og:locale" content="en_GB">
+<meta property="og:locale:alternate" content="ne_NP">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-title" content="Hazard Map">
+<meta name="mobile-web-app-capable" content="yes">
 <link rel="preload" href="data/latest.json" as="fetch" crossorigin="anonymous">
 <link rel="preload" href="data/places.json" as="fetch" crossorigin="anonymous">
 <link rel="stylesheet" href="/src/style.css">
@@ -23,6 +40,7 @@
     <button id="lang" class="lang" type="button"></button>
   </div>
   <p class="disclaimer" role="note"><span class="long" data-t="disclaimer"></span><span class="short" data-t="disclaimerShort"></span></p>
+  <p class="offline" id="offline" role="status" hidden data-t="offline"></p>
 </header>
 <main id="main">
   <section id="stage" aria-label="3D relief map of Nepal">

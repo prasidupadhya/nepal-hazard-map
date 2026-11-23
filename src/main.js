@@ -120,7 +120,15 @@ export async function route() {
   document.body.classList.toggle('full', !!v.full);
   if (!v.full) requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
   $('#legend').hidden = true;
-  await v.enter(panel, () => my === gen);
+  try { await v.enter(panel, () => my === gen); }
+  catch (err) {
+    // the data could not be loaded (first visit with a bad connection): say so and offer a retry
+    if (my !== gen) return;
+    console.warn(err);
+    panel.innerHTML = `<h1>${t('loadFail')}</h1><p class="lead">${t('loadFailHelp')}</p><p><button class="btn" type="button" id="retry">${t('retry')}</button></p>`;
+    $('#retry').onclick = () => location.reload();
+    return;
+  }
   if (my === gen) performance.mark('view:' + key);
 }
 // a new screen starts at the top: on phones the whole page scrolls, and the map must be in view again
@@ -183,7 +191,17 @@ const dataP = Promise.all([fetch('data/latest.json').then((r) => r.json()), fetc
   .then(([l, p]) => { state.latest = l; state.places = p; });
 const mapP = mapModule.then((m) => { m.setOnView(onView); return m.init(document.getElementById('gl'), { onPick: (x) => state.view?.onPick?.(x), onFrame: (now) => state.view?.onFrame?.(now) }); });
 export const dataReady = dataP;
-export const mapReady = mapP;
+// map-only follow-ups wait on this; with no 3D map they simply never run (nothing else waits on it)
+export const mapReady = mapP.catch(() => new Promise(() => {}));
 // rivers are decoded when the browser is idle, so they never compete with the first frames
 export const ready = Promise.all([dataP, mapP]).then(() => { drawLayers(); drawLabels(); (window.requestIdleCallback || setTimeout)(() => loadRivers(), { timeout: 1500 }); });
+// no 3D map (no WebGL, or it failed to start): everything else still works, and the map area says why
+mapP.catch(() => { document.body.classList.add('nogl'); const n = document.createElement('p'); n.className = 'nogl-note'; n.dataset.t = 'noMap'; n.textContent = t('noMap'); $('#stage').append(n); });
+ready.catch(() => {});
 route();
+
+// ---------- offline ----------
+// The app opens without a connection once visited (public/sw.js); say so plainly when offline.
+const offlineNote = () => { $('#offline').hidden = navigator.onLine !== false; };
+addEventListener('online', offlineNote); addEventListener('offline', offlineNote); offlineNote();
+if (import.meta.env.PROD && 'serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));

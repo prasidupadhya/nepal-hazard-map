@@ -99,5 +99,38 @@ for (const tab of ['incidents', 'quakes']) {
   ok(km > 5 && km < 900, `phone + canvas noise: a finger tap traces the river to the border (${km} km)`);
   ok(await p.$eval('#sel', (e) => e.getBoundingClientRect().top < innerHeight - 120), 'the trace details open in view, right under the map');
   await ctx.close(); }
+// offline: after one visit the site opens with no connection, shows the saved data and says it is offline;
+// a lake looked at before still runs (its river tiles were saved)
+{ const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  const p = await ctx.newPage(); const errs = []; p.on('pageerror', (e) => errs.push(e.message));
+  await p.goto(BASE + '#/glof'); await p.waitForFunction(() => performance.getEntriesByName('map-ready').length, null, { timeout: 90000 });
+  await p.waitForFunction(() => navigator.serviceWorker?.controller || navigator.serviceWorker?.ready.then(() => location.reload()), null, { timeout: 30000 }).catch(() => {});
+  await p.reload(); await p.waitForFunction(() => !!navigator.serviceWorker.controller, null, { timeout: 30000 });
+  await p.waitForSelector('#run'); await p.tap('#run'); await p.waitForSelector('#out tbody tr', { timeout: 30000 });
+  await ctx.setOffline(true);
+  await p.goto(BASE + '#/'); await p.reload();
+  const opened = await p.waitForFunction(() => performance.getEntriesByName('map-ready').length, null, { timeout: 60000 }).then(() => true, () => false);
+  ok(opened, 'offline: the site opens from the saved copy and draws the 3D map');
+  ok(await p.$eval('#offline', (e) => !e.hidden && /offline/i.test(e.textContent)), 'offline: a notice says it is offline');
+  ok(/River levels/.test(await p.$eval('#panel', (e) => e.innerText)), 'offline: the saved data and its age are shown');
+  await p.goto(BASE + '#/glof'); await p.waitForSelector('#run'); await p.tap('#run');
+  const ran = await p.waitForSelector('#out tbody tr', { timeout: 30000 }).then(() => true, () => false);
+  ok(ran && /Nepal border/.test(await p.$eval('#out tbody tr:last-child', (r) => r.innerText)), 'offline: a lake run before still runs');
+  ok(!errs.length, 'offline: no script errors ' + JSON.stringify(errs.slice(0, 2)));
+  await ctx.close(); }
+// failure cases: no WebGL (old phones, locked-down browsers) and data that fails to load
+{ const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  await ctx.addInitScript(() => { const g = HTMLCanvasElement.prototype.getContext; HTMLCanvasElement.prototype.getContext = function (t, ...a) { return /webgl/.test(t) ? null : g.call(this, t, ...a); }; });
+  const p = await ctx.newPage(); const errs = []; p.on('pageerror', (e) => errs.push(e.message));
+  await p.goto(BASE + '#/glof'); await p.waitForSelector('#run'); await p.tap('#run');
+  const rows = await p.waitForSelector('#out tbody tr', { timeout: 30000 }).then(() => p.$$eval('#out tbody tr', (r) => r.length), () => 0);
+  ok(rows > 3 && /WebGL/.test(await p.$eval('#stage', (e) => e.innerText)) && !errs.length, `no WebGL: the map says why, the lake burst still runs (${rows} rows), no errors ${JSON.stringify(errs.slice(0, 1))}`);
+  await ctx.close(); }
+{ const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
+  await ctx.route('**/data/latest.json', (r) => r.abort());
+  const p = await ctx.newPage(); const errs = []; p.on('pageerror', (e) => errs.push(e.message));
+  await p.goto(BASE + '#/'); const shown = await p.waitForSelector('#retry', { timeout: 20000 }).then(() => true, () => false);
+  ok(shown && !errs.length, 'data fails to load: a clear message and a "Try again" button, no errors');
+  await ctx.close(); }
 await browser.close();
 console.log(fails.length ? `\n${fails.length} FAILED` : '\nALL PASS'); process.exit(fails.length ? 1 : 0);

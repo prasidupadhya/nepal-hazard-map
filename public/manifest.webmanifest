@@ -1,0 +1,19 @@
+{
+  "name": "Nepal Hazard Map",
+  "short_name": "Hazard Map",
+  "description": "Floods, glacial lake outbursts and earthquakes in Nepal: daily copies of official data on a 3D map, with what-if scenarios. Not an official warning.",
+  "lang": "en",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#E7ECEA",
+  "theme_color": "#F7F9F7",
+  "categories": ["weather", "education", "utilities"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}
