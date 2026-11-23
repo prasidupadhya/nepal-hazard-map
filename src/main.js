@@ -199,9 +199,3 @@ export const ready = Promise.all([dataP, mapP]).then(() => { drawLayers(); drawL
 mapP.catch(() => { document.body.classList.add('nogl'); const n = document.createElement('p'); n.className = 'nogl-note'; n.dataset.t = 'noMap'; n.textContent = t('noMap'); $('#stage').append(n); });
 ready.catch(() => {});
 route();
-
-// ---------- offline ----------
-// The app opens without a connection once visited (public/sw.js); say so plainly when offline.
-const offlineNote = () => { $('#offline').hidden = navigator.onLine !== false; };
-addEventListener('online', offlineNote); addEventListener('offline', offlineNote); offlineNote();
-if (import.meta.env.PROD && 'serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));

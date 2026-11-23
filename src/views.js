@@ -12,6 +12,17 @@ import { fetchPNG } from './png.js';
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const ROMAN = js.ROMAN;
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+// Phones: the map sits above the controls. Before an animation starts, bring the map back into view
+// and wait for the scroll to finish, so the start is not missed. (Safari without 'scrollend': the timeout.)
+const phone = () => matchMedia('(max-width: 860px)').matches;
+function mapIntoView() {
+  if (!phone() || scrollY < 4) return Promise.resolve();
+  return new Promise((res) => {
+    let done = false; const end = () => { if (done) return; done = true; removeEventListener('scrollend', end); res(); };
+    addEventListener('scrollend', end); setTimeout(end, REDUCED ? 0 : 700);
+    scrollTo({ top: 0, behavior: REDUCED ? 'auto' : 'smooth' });
+  });
+}
 
 // ---------- shared bits ----------
 // The "edition" block: how old every dataset is, like the edition note on a survey sheet.
@@ -199,7 +210,7 @@ const mapView = {
   onPick({ layer, item, ground }, live = () => true) {
     const el = document.getElementById('sel'); if (!el) return;
     // phones: the details open at the top of the sheet, so bring the sheet back up if it was scrolled
-    if (matchMedia('(max-width: 860px)').matches && scrollY > 0) scrollTo({ top: 0, behavior: REDUCED ? 'auto' : 'smooth' });
+    mapIntoView();
     // a river, or any spot on the ground: follow the water downstream from there
     if (layer === 'network' || ground) return traceRiver(el, ground || item.ll, () => live() && state.view === mapView);
     RT = null; map.clearTrace();
@@ -394,13 +405,16 @@ function frontAt(k) {
 }
 const syncFronts = () => map.setFronts(frontAt(0), frontAt(1));
 async function run(el, live) {
+  const shown = mapIntoView(); // scroll up to the map while the flood is computed
   const out = el.querySelector('#out'); out.innerHTML = `<p class="note">${t('loading')}</p>`;
   const r = await routeFor(G.lake.ll), w = await engine(); await dataReady; if (!live()) return;
   G.res = w ? w.glof(...G.lake.ll, G.vol) : js.glof(js.tracePath(r, ...G.lake.ll), G.vol);
-  G.t = 0; G.playing = true; G.last = 0;
+  G.t = 0; G.playing = false; G.last = 0;
   showResult(el);
   mapReady.then(() => { if (!live()) return; map.setPath(G.res); map.setPathTime(0); syncFronts(); const mid = G.res[Math.floor(G.res.length / 2)]; map.flyTo(...mid.ll, Math.min(420, 60 + G.res.at(-1).km * 0.9)); });
   performance.mark('glof-result');
+  await shown; if (!live() || G.playing) return;
+  G.t = 0; G.last = 0; G.playing = true; syncPlay(); // the flood starts once the map is in view
 }
 function placesAlong(res) {
   const out = [], seen = new Set();
@@ -440,7 +454,10 @@ function showResult(el) {
     <p class="noprint"><button class="btn ghost" type="button" id="pr">${t('print')}</button></p>`;
   // print the whole flooded path (not the moment the timeline is at), then put the timeline back
   out.querySelector('#pr').onclick = () => doPrint(boundsOf(res.map((q) => q.ll)), () => { map.setPathTime(-1); map.hideFronts(); }, () => { map.setPathTime(G.t); syncFronts(); });
-  out.querySelector('#play').onclick = () => { if (G.t >= end) G.t = 0; G.playing = !G.playing; G.last = 0; syncPlay(); };
+  out.querySelector('#play').onclick = async () => {
+    if (G.playing) { G.playing = false; syncPlay(); return; }
+    await mapIntoView(); if (G.t >= end) G.t = 0; G.playing = true; G.last = 0; syncPlay();
+  };
   out.querySelector('#tslider').oninput = (e) => { G.t = +e.target.value; G.playing = false; syncPlay(); map.setPathTime(G.t); syncTime(); syncFronts(); };
   syncPlay(); syncTime();
 }
@@ -464,7 +481,7 @@ const quakeView = {
     M.value = Q.M; S.value = Q.strike; fill(M);
     M.oninput = () => { Q.M = +M.value; fill(M); update(false); };
     S.onchange = () => { Q.strike = ((+S.value % 360) + 360) % 360; update(false); };
-    el.querySelector('#go').onclick = () => update(true);
+    el.querySelector('#go').onclick = () => mapIntoView().then(() => update(true));
     legend();
     mapReady.then(() => live() && map.flyTo(...Q.ll, 420));
     await Promise.all([engine(), dataReady]); if (!live()) return;

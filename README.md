@@ -36,10 +36,7 @@ phones, works in both languages, and prints a clean report.
   direction; see the likely shaking band for all 77 districts.
 - **Printable reports:** a north-up map with scale and legend, key figures, an
   arrival-time chart, and the full table, on two A4 pages.
-- **Works offline and installs like an app.** After one visit the site opens
-  without a connection, showing the copy saved on the phone with its age; a
-  lake or river looked at before still runs. Add it to the home screen from the
-  browser menu.
+- **Installs like an app:** add it to the home screen from the browser menu.
 - **Works on every phone:** no WebGL? The data and scenarios still work and
   the map says why. Data can't load? A clear message and a retry button.
 - **Rust → WebAssembly** scenario engine, kept identical to the JavaScript

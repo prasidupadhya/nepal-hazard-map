@@ -99,24 +99,14 @@ for (const tab of ['incidents', 'quakes']) {
   ok(km > 5 && km < 900, `phone + canvas noise: a finger tap traces the river to the border (${km} km)`);
   ok(await p.$eval('#sel', (e) => e.getBoundingClientRect().top < innerHeight - 120), 'the trace details open in view, right under the map');
   await ctx.close(); }
-// offline: after one visit the site opens with no connection, shows the saved data and says it is offline;
-// a lake looked at before still runs (its river tiles were saved)
+// phone: Run is below the map; the page scrolls back up so the flood starts in view
 { const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
-  const p = await ctx.newPage(); const errs = []; p.on('pageerror', (e) => errs.push(e.message));
+  const p = await ctx.newPage();
   await p.goto(BASE + '#/glof'); await p.waitForFunction(() => performance.getEntriesByName('map-ready').length, null, { timeout: 90000 });
-  await p.waitForFunction(() => navigator.serviceWorker?.controller || navigator.serviceWorker?.ready.then(() => location.reload()), null, { timeout: 30000 }).catch(() => {});
-  await p.reload(); await p.waitForFunction(() => !!navigator.serviceWorker.controller, null, { timeout: 30000 });
-  await p.waitForSelector('#run'); await p.tap('#run'); await p.waitForSelector('#out tbody tr', { timeout: 30000 });
-  await ctx.setOffline(true);
-  await p.goto(BASE + '#/'); await p.reload();
-  const opened = await p.waitForFunction(() => performance.getEntriesByName('map-ready').length, null, { timeout: 60000 }).then(() => true, () => false);
-  ok(opened, 'offline: the site opens from the saved copy and draws the 3D map');
-  ok(await p.$eval('#offline', (e) => !e.hidden && /offline/i.test(e.textContent)), 'offline: a notice says it is offline');
-  ok(/River levels/.test(await p.$eval('#panel', (e) => e.innerText)), 'offline: the saved data and its age are shown');
-  await p.goto(BASE + '#/glof'); await p.waitForSelector('#run'); await p.tap('#run');
-  const ran = await p.waitForSelector('#out tbody tr', { timeout: 30000 }).then(() => true, () => false);
-  ok(ran && /Nepal border/.test(await p.$eval('#out tbody tr:last-child', (r) => r.innerText)), 'offline: a lake run before still runs');
-  ok(!errs.length, 'offline: no script errors ' + JSON.stringify(errs.slice(0, 2)));
+  await p.locator('#run').scrollIntoViewIfNeeded(); const y0 = await p.evaluate(() => scrollY);
+  await p.tap('#run'); await p.waitForSelector('#out tbody tr', { timeout: 30000 }); await p.waitForTimeout(900);
+  const st = await p.evaluate(() => ({ y: scrollY, t: document.getElementById('tout')?.textContent, play: document.getElementById('play')?.textContent }));
+  ok(y0 > 100 && st.y === 0 && /Pause/.test(st.play), `phone: Run scrolls up to the map, then the flood plays (scrolled from ${y0} to ${st.y}; ${st.play}, ${st.t})`);
   await ctx.close(); }
 // failure cases: no WebGL (old phones, locked-down browsers) and data that fails to load
 { const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
