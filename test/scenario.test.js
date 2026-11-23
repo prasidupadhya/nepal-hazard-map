@@ -48,6 +48,10 @@ describe('GLOF ranges', () => {
       const last = g.at(-1); expect(last.arrivalH[0] * 3600 * 15).toBeGreaterThanOrEqual(last.km * 1000 - 1);
     }
   });
+  it('small lakes (under 1.3 million m³, where the formulas cross) still give low ≤ high', () => {
+    const g = glof(tracePath(route, ...LAKES.find((l) => l.en === 'Tsho Rolpa').ll), [0.1, 0.3]);
+    for (const x of g) { expect(x.peak[0]).toBeLessThanOrEqual(x.peak[1]); expect(x.arrivalH[0]).toBeLessThanOrEqual(x.arrivalH[1]); expect(x.depth[0]).toBeLessThanOrEqual(x.depth[1]); }
+  });
   it('bigger lake → earlier arrival and higher peak', () => {
     const p = tracePath(route, ...LAKES.find((l) => l.en === 'Tsho Rolpa').ll), s = glof(p, [10, 20]).at(-1), b = glof(p, [80, 100]).at(-1);
     expect(b.arrivalH[0]).toBeLessThan(s.arrivalH[0]); expect(b.peak[1]).toBeGreaterThan(s.peak[1]);

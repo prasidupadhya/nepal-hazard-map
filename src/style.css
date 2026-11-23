@@ -156,7 +156,7 @@ input[type=range]:active::-webkit-slider-thumb { transform: scale(1.12); }
 .timeline { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; margin: 8px 0 14px; }
 .timeline output { min-width: 6.5em; text-align: right; white-space: nowrap; font-weight: 600; font-stretch: 82%; font-size: 17px; }
 .fronts { display: flex; gap: 18px; font-size: 13px; color: var(--silt); margin: -6px 0 12px; }
-.fronts span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 2.5px solid var(--c); margin-right: 6px; vertical-align: -.1em; }
+.fronts span::before { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 50%; border: 3px solid var(--c); box-shadow: 0 0 0 1.5px var(--o, #1b2a32); margin-right: 7px; vertical-align: -.1em; }
 
 /* tables */
 .tw { overflow-x: auto; margin: 0 -2px; }
@@ -244,3 +244,6 @@ details.group summary .count { font-weight: 400; color: var(--silt); font-size: 
 details.group .list { border-top: 0; margin: 0 0 8px 14px; }
 @media (max-width: 860px) { .glance li { grid-template-columns: 1fr; } }
 @media print { details.group > *:not(summary) { display: block !important; } details.group summary::before { display: none; } }
+
+/* scenario callouts: the yellow scenario ink needs its thin black edge to read on paper */
+.callout.scenario { border-left-width: 5px; box-shadow: inset 1.5px 0 0 #1b2a32, -1.5px 0 0 #1b2a32; }

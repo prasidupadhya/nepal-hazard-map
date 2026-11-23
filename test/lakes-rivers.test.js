@@ -33,6 +33,13 @@ describe('glacial lakes (ICIMOD 2020, Table 5.6)', () => {
     const v = Object.fromEntries(LAKES.filter((l) => l.survey).map((l) => [l.en, l.survey]));
     expect(v).toEqual({ 'Tsho Rolpa': 85.94, 'Imja Tsho': 35.5, Thulagi: 35.37 });
   });
+  it('every lake has a volume range: surveyed, or estimated from a measured area ≥ 0.02 km²', () => {
+    for (const l of LAKES) {
+      expect(l.vol, l.id).toBeTruthy(); expect(l.vol[0]).toBeGreaterThan(0); expect(l.vol[0]).toBeLessThan(l.vol[1]);
+      if (l.volSrc === 'area') { expect(l.area).toBeGreaterThanOrEqual(0.02); expect(l.areaDate).toMatch(/^20\d\d-\d\d-\d\d$/); }
+    }
+    expect(LAKES.filter((l) => l.volSrc === 'survey').length).toBe(3);
+  });
   it('every lake’s flood path enters Nepal; Tibetan lakes cross at the known border points', () => {
     const crossing = { Arun: [87.43, 27.81], 'Sun Koshi': [85.95, 27.95], Trishuli: [85.37, 28.26] };
     for (const l of LAKES) {
@@ -41,8 +48,8 @@ describe('glacial lakes (ICIMOD 2020, Table 5.6)', () => {
       if (l.country[0] === 'Tibet, China' && crossing[l.basin[0]]) expect(near(p[k].ll, crossing[l.basin[0]], 4), l.id).toBe(true);
     }
   });
-  it('baked lake paths in rivers.json equal the live flood routing', () => {
-    for (const l of LAKES) expect(decode(...R.lakes[l.id]).map((c) => cellLL(ROUTE, c % ROUTE.nx, Math.floor(c / ROUTE.nx)))).toEqual(tracePath(route, ...l.ll).map((q) => q.ll));
+  it('baked lake paths in rivers.json equal the live routing (to the map edge)', () => {
+    for (const l of LAKES) expect(decode(...R.lakes[l.id]).map((c) => cellLL(ROUTE, c % ROUTE.nx, Math.floor(c / ROUTE.nx)))).toEqual(tracePath(route, ...l.ll, 6000, false).map((q) => q.ll));
   });
 });
 

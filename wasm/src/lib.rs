@@ -1,7 +1,7 @@
 // Same maths as src/scenario.js (the JS version is the test oracle).
 
 const W: f64 = 79.9; const N: f64 = 30.5;
-const RSTEP: f64 = 0.005; const RNX: i32 = 1680; const RNY: i32 = 850;
+const RSTEP: f64 = 1.0 / 240.0; const RNX: i32 = 2016; const RNY: i32 = 1020; // HydroSHEDS 15″ grid (see src/grid.js)
 const KM_LAT: f64 = 111.32;
 const D8: [(i32, i32); 8] = [(1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1), (0, -1), (1, -1)];
 const PLAINS_M: i16 = 120;
@@ -11,7 +11,7 @@ const PLAINS_M: i16 = 120;
 #[inline] fn hyp(a: f64, b: f64) -> f64 { sqrt(a * a + b * b) }
 #[inline] fn clamp(m: f64) -> f64 { if m < 1.0 { 1.0 } else if m > 10.0 { 10.0 } else { m } }
 
-static mut HEAP: [u8; 8 << 20] = [0; 8 << 20];
+static mut HEAP: [u8; 16 << 20] = [0; 16 << 20];
 static mut TOP: usize = 0;
 #[no_mangle] pub extern "C" fn reset() { unsafe { TOP = 0; } }
 #[no_mangle] pub extern "C" fn alloc(n: usize) -> *mut u8 {
@@ -65,7 +65,9 @@ pub extern "C" fn glof(dir: *const u8, elev: *const i16, lon: f64, lat: f64, vlo
         i += D8[(d - 1) as usize].0; j += D8[(d - 1) as usize].1;
     }
     // hydraulics
-    let qp_lo = 0.72 * libm::pow(vlo * 1e6, 0.53); let qp_hi = 0.00077 * libm::pow(vhi * 1e6, 1.017);
+    // lowest and highest of both formulas (they cross near 1.3 million m³)
+    let ev = |v: f64| 0.72 * libm::pow(v * 1e6, 0.53); let hu = |v: f64| 0.00077 * libm::pow(v * 1e6, 1.017);
+    let qp_lo = ev(vlo).min(hu(vlo)); let qp_hi = ev(vhi).max(hu(vhi));
     let (mut tf, mut ts) = (0.0, 0.0);
     for k in 0..cnt {
         let at = |q: i32, f: usize| o[(q * 10) as usize + f];

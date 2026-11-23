@@ -14,6 +14,8 @@ export const toLL = (x, z) => [C.lon + x / KX, C.lat - z / KM_PER_DEG_LAT];
 
 const MIST = 0xe7ecea, BASE = 12; // page/fog colour; slab thickness below sea level (scene km)
 const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let netMinKm2 = 0; // scenario screens show only main rivers, for orientation
+export const setNetworkMin = (km2) => { netMinKm2 = km2; dirty = true; };
 let labelCanvas, lctx, labels = []; const labelW = new Map(), lineMats = [], netObjs = [];
 let hidden = false, labelKey = '';
 let inset = 0, cssH = 1, lastView = [1, 0], firstFrame = false, renderer, scene, camera, controls, terrain, heights, host, dirty = true, anim = null, onPick = null, onFrame = null, onView = null;
@@ -206,7 +208,7 @@ function loop(now) {
     const dist = camera.position.distanceTo(controls.target);
     common.fogNear.value = scene.fog.near = dist * 1.1; common.fogFar.value = scene.fog.far = dist * 2.9;
     const risen = common.rise.value > 0.999;
-    for (const o of netObjs) o.visible = risen && !!layers.network?.visible && dist < o.userData.maxDist; // rivers appear once the relief has risen
+    for (const o of netObjs) o.visible = risen && !!layers.network?.visible && dist < o.userData.maxDist && o.userData.minKm2 >= netMinKm2; // rivers appear once the relief has risen
     renderer.render(scene, camera); dirty = false;
     drawLabels(dist);
     if (terrain && !firstFrame) { firstFrame = true; performance.mark('map-ready'); }
@@ -265,8 +267,8 @@ export function setRiverNetwork(polys) {
   for (const o of netObjs) { scene.remove(o); o.geometry.dispose(); }
   netObjs.length = 0;
   const pick = [], items = [];
-  // tributaries (< 1000 km²) only when zoomed in: at the national view they are sub-pixel clutter
-  for (const [minKm2, maxKm2, width, color, maxDist] of [[250, 1000, 1.2, 0x3b8aa3, 520], [1000, 5000, 1.6, 0x2f7f9a, Infinity], [5000, Infinity, 2.6, 0x0a6787, Infinity]]) {
+  // smaller rivers only when zoomed in: at the national view they are sub-pixel clutter
+  for (const [minKm2, maxKm2, width, color, maxDist] of [[25, 250, 1, 0x4a95ad, 300], [250, 1000, 1.2, 0x3b8aa3, 520], [1000, 5000, 1.6, 0x2f7f9a, Infinity], [5000, Infinity, 2.6, 0x0a6787, Infinity]]) {
     const seg = [];
     polys.forEach((pl, pi) => {
       if (pl.km2 < minKm2 || pl.km2 >= maxKm2) return;
@@ -277,7 +279,7 @@ export function setRiverNetwork(polys) {
     const g = new LineSegmentsGeometry(); g.setPositions(seg);
     const m = new LineMaterial({ color, linewidth: width, transparent: true, opacity: 0.95, depthTest: true });
     m.resolution.set(host.clientWidth || 1, host.clientHeight || 1); lineMats.push(m);
-    const o = new LineSegments2(g, m); o.renderOrder = 1; o.visible = false; o.userData.maxDist = maxDist; scene.add(o); netObjs.push(o);
+    const o = new LineSegments2(g, m); o.renderOrder = 1; o.visible = false; o.userData.maxDist = maxDist; o.userData.minKm2 = minKm2; scene.add(o); netObjs.push(o);
   }
   layers.network = { obj: netObjs[0], items, pos: new Float32Array(pick), visible: layers.network?.visible ?? true };
   dirty = true;
@@ -289,7 +291,8 @@ export function setTrace(pts) {
   clearTrace(); if (!scene || pts.length < 2) return;
   const seg = []; let prev = null;
   for (const ll of pts) { const [x, z] = toXZ(...ll), v = [x, heightAt(...ll) + 0.7, z]; if (prev) seg.push(...prev, ...v); prev = v; }
-  trace = [[9, 0xf7f9f7, 0.9], [4.5, 0x05475f, 1]].map(([w, c, o], k) => {
+  // scenario ink: yellow line with a thin black edge (no base-map layer uses it)
+  trace = [[7, 0x1b2a32, 1], [4.5, 0xffd60a, 1]].map(([w, c, o], k) => {
     const g = new LineSegmentsGeometry(); g.setPositions(seg);
     const m = new LineMaterial({ color: c, linewidth: w, transparent: true, opacity: o, depthTest: false });
     m.resolution.set(host.clientWidth || 1, host.clientHeight || 1); lineMats.push(m);
@@ -375,42 +378,41 @@ export function setShaking(grid, a, b) {
 export const setShakeRadius = (km) => { uni.radius.value = km; dirty = true; };
 export const clearShaking = () => { uni.overlayOn.value = 0; dirty = true; };
 
-// ---- flood path: ribbon draped on terrain, coloured by arrival window ----
-let pathObj = null, marker = null;
-const pathUni = { uT: { value: -1 } };
-const pVert = `attribute vec2 arr; varying vec2 vArr; varying float vSide; attribute float side;
-void main(){ vArr = arr; vSide = side; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }`;
-const pFrag = `uniform float uT; varying vec2 vArr; varying float vSide;
-void main(){
-  float edge = 1. - smoothstep(.6, 1., abs(vSide));
-  vec3 idle = vec3(.04,.40,.53), reached = vec3(.02,.33,.46), band = vec3(.73,.47,0.);
-  vec3 c = idle; float a = .5;
-  if (uT >= 0.) {
-    if (uT >= vArr.y) { c = reached; a = .95; }
-    else if (uT >= vArr.x) { float f = (uT - vArr.x) / max(vArr.y - vArr.x, 1e-3); c = mix(band, reached, f); a = .95; }
-    else { a = .22; }
-  }
-  gl_FragColor = vec4(c, a * (.35 + .65 * edge));
-}`;
+// ---- flood path: yellow line on a black edge (screen-space width), coloured by arrival window ----
+// Each vertex knows its earliest and latest arrival; setPathTime recolours: arrived = yellow,
+// between the two fronts = pale yellow, not yet reached = grey.
+let pathObj = null, pathArr = null, marker = null;
+const P_ARRIVED = [1, 0.84, 0.04], P_BAND = [1, 0.95, 0.62], P_IDLE = [0.74, 0.72, 0.62];
 export function setPath(pts) {
   clearPath();
-  if (!pts.length) return;
-  const n = pts.length, W = 1.1, pos = new Float32Array(n * 6), arr = new Float32Array(n * 4), side = new Float32Array(n * 2), idx = [];
-  const xz = pts.map((p) => toXZ(...p.ll));
-  for (let k = 0; k < n; k++) {
-    const a = xz[Math.max(0, k - 2)], b = xz[Math.min(n - 1, k + 2)], dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz) || 1, nxv = -dz / L, nzv = dx / L;
-    const y = heightAt(...pts[k].ll) + 0.35;
-    pos.set([xz[k][0] + nxv * W, y, xz[k][1] + nzv * W, xz[k][0] - nxv * W, y, xz[k][1] - nzv * W], 6 * k);
-    const t = pts[k].arrivalH || [0, 0]; arr.set([t[0], t[1], t[0], t[1]], 4 * k); side.set([1, -1], 2 * k);
-    if (k) { const p = 2 * (k - 1), q = 2 * k; idx.push(p, p + 1, q, q, p + 1, q + 1); }
+  if (pts.length < 2) return;
+  const seg = [], arr = [];
+  for (let k = 1; k < pts.length; k++) {
+    for (const q of [pts[k - 1], pts[k]]) { const [x, z] = toXZ(...q.ll); seg.push(x, heightAt(...q.ll) + 0.6, z); arr.push(q.arrivalH || [0, 0]); }
   }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('arr', new THREE.BufferAttribute(arr, 2)); g.setAttribute('side', new THREE.BufferAttribute(side, 1)); g.setIndex(idx);
-  pathObj = new THREE.Mesh(g, new THREE.ShaderMaterial({ uniforms: pathUni, vertexShader: pVert, fragmentShader: pFrag, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
-  pathObj.renderOrder = 3; scene.add(pathObj); dirty = true;
+  pathArr = arr;
+  pathObj = [[7, false], [4.2, true]].map(([w, colored], k) => {
+    const g = new LineSegmentsGeometry(); g.setPositions(seg);
+    if (colored) g.setColors(new Float32Array(seg.length).fill(0.8));
+    const m = new LineMaterial({ color: colored ? 0xffffff : 0x1b2a32, linewidth: w, vertexColors: colored, depthTest: false });
+    m.resolution.set(host.clientWidth || 1, host.clientHeight || 1); lineMats.push(m);
+    const o = new LineSegments2(g, m); o.renderOrder = 3 + k; scene.add(o); return o;
+  });
+  setPathTime(-1);
 }
-export const setPathTime = (h) => { pathUni.uT.value = h; dirty = true; };
-export function clearPath() { if (pathObj) { scene.remove(pathObj); pathObj.geometry.dispose(); pathObj = null; } pathUni.uT.value = -1; if (fronts) hideFronts(); dirty = true; }
+export function setPathTime(h) {
+  if (!pathObj) return;
+  const buf = pathObj[1].geometry.attributes.instanceColorStart.data, a = buf.array;
+  pathArr.forEach(([e, l], v) => {
+    const c = h < 0 ? P_ARRIVED : h >= l ? P_ARRIVED : h >= e ? P_BAND : P_IDLE;
+    a.set(c, v * 3);
+  });
+  buf.needsUpdate = true; dirty = true;
+}
+export function clearPath() {
+  if (pathObj) for (const o of pathObj) { scene.remove(o); o.geometry.dispose(); lineMats.splice(lineMats.indexOf(o.material), 1); o.material.dispose(); }
+  pathObj = null; pathArr = null; if (fronts) hideFronts(); dirty = true;
+}
 
 // single highlighted location (search result / epicentre / lake): a slim survey pin
 export function setMarker(ll, color = '#1B2A32') {
@@ -435,9 +437,12 @@ let fronts = null;
 export function setFronts(early, late) {
   if (!scene) return;
   if (!fronts) {
-    fronts = [0x0a6787, 0xb97800].map((c) => {
-      const m = new THREE.Mesh(new THREE.RingGeometry(2.2, 3.4, 40), new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.95, side: THREE.DoubleSide, depthTest: false }));
-      m.rotation.x = -Math.PI / 2; m.renderOrder = 5; scene.add(m); return m;
+    // earliest front: yellow ring outlined in black; latest front: black ring outlined in yellow
+    fronts = [[0xffd60a, 0x1b2a32], [0x1b2a32, 0xffd60a]].map(([fill, line]) => {
+      const g = new THREE.Group(), mat = (c) => new THREE.MeshBasicMaterial({ color: c, side: THREE.DoubleSide, depthTest: false });
+      const outer = new THREE.Mesh(new THREE.RingGeometry(1.9, 3.7, 40), mat(line)), inner = new THREE.Mesh(new THREE.RingGeometry(2.25, 3.35, 40), mat(fill));
+      outer.renderOrder = 5; inner.renderOrder = 6; inner.position.y = 0.01; g.add(outer, inner);
+      g.rotation.x = -Math.PI / 2; scene.add(g); return g;
     });
   }
   [early, late].forEach((ll, k) => { const f = fronts[k]; f.visible = !!ll; if (ll) { const [x, z] = toXZ(...ll); f.position.set(x, heightAt(...ll) + 0.5, z); } });

@@ -4,8 +4,8 @@ import { BOX, ROUTE, D8, kmPerDegLon, KM_PER_DEG_LAT, cellLL } from './grid.js';
 
 export const ASSUMPTIONS = {
   glof: {
-    peakLow: 'Evans (1986): Qp = 0.72·V^0.53',
-    peakHigh: 'Huggel et al. (2002): Qp = 0.00077·V^1.017 (upper envelope)',
+    peakLow: 'Peak flow: lowest and highest of Evans (1986), Qp = 0.72·V^0.53',
+    peakHigh: 'and Huggel et al. (2002), Qp = 0.00077·V^1.017 (upper envelope)',
     manningN: [0.04, 0.08], widthCoef: [2.5, 5], attenuationKm: [40, 150], maxCelerity: 15, minSlope: 0.0005,
   },
   quake: {
@@ -19,10 +19,11 @@ export const ASSUMPTIONS = {
 export const peakEvans = (vM3) => 0.72 * vM3 ** 0.53;
 export const peakHuggel = (vM3) => 0.00077 * vM3 ** 1.017;
 
-// Follow D8 flow directions from the lake cell down to the plains. Below PLAINS_M
-// the ground is too flat for a ~500 m grid to say where water goes, so we stop.
+// Follow D8 flow directions downstream. Flood scenarios stop at the plains (below PLAINS_M):
+// there a flood wave spreads sideways and a one-dimensional model no longer holds.
+// River traces (toPlains = false) continue along the river to the edge of the map.
 export const PLAINS_M = 120;
-export function tracePath(route, lon, lat, maxSteps = 4000) {
+export function tracePath(route, lon, lat, maxSteps = 6000, toPlains = true) {
   const { nx, ny, dir, elev } = route;
   let i = Math.floor((lon - BOX.w) / ROUTE.step), j = Math.floor((BOX.n - lat) / ROUTE.step);
   const pts = []; let km = 0;
@@ -30,7 +31,7 @@ export function tracePath(route, lon, lat, maxSteps = 4000) {
     const k = j * nx + i, [lo, la] = cellLL(ROUTE, i, j);
     if (pts.length) { const p = pts.at(-1); km += Math.hypot((lo - p.ll[0]) * kmPerDegLon(la), (la - p.ll[1]) * KM_PER_DEG_LAT); }
     pts.push({ ll: [lo, la], km, z: elev[k] });
-    const d = dir[k]; if (!d || elev[k] < PLAINS_M) break;
+    const d = dir[k]; if (!d || (toPlains && elev[k] < PLAINS_M)) break;
     i += D8[d - 1][0]; j += D8[d - 1][1];
   }
   return pts;
@@ -44,7 +45,9 @@ const hydraulics = (Q, n, a, S) => {
 
 export function glof(path, volMm3, opt = ASSUMPTIONS.glof) {
   const [nLo, nHi] = opt.manningN, [aLo, aHi] = opt.widthCoef, [LLo, LHi] = opt.attenuationKm;
-  const QpLo = peakEvans(volMm3[0] * 1e6), QpHi = peakHuggel(volMm3[1] * 1e6);
+  // The two formulas cross near 1.3 million m³ (Evans gives more for smaller lakes): take the lowest and highest of both.
+  const v0 = volMm3[0] * 1e6, v1 = volMm3[1] * 1e6;
+  const QpLo = Math.min(peakEvans(v0), peakHuggel(v0)), QpHi = Math.max(peakEvans(v1), peakHuggel(v1));
   const out = []; let tFast = 0, tSlow = 0;
   for (let k = 0; k < path.length; k++) {
     const p = path[k];

@@ -2,7 +2,7 @@ import { t, tf, num, when, day, age, name, lang, digits, monthYear } from './i18
 import { freshness } from './age.js';
 import { map } from './map.js';
 import { MMI_COLORS } from './colors.js';
-import { state, dataReady, mapReady, showChips, LAYER_COLOR, LAKE_RANK_COLOR } from './main.js';
+import { state, dataReady, mapReady, showChips, LAYER_COLOR, LAKE_RANK_COLOR, SCENARIO } from './main.js';
 import { PROVINCES } from './districts.js';
 import { VIEW, ROUTE, D8 } from './grid.js';
 import { makeRouteLoader } from './route-tiles.js';
@@ -55,8 +55,8 @@ async function tilePixels(url) {
   return { w: bmp.width, h: bmp.height, rgb: c.getImageData(0, 0, bmp.width, bmp.height).data };
 }
 const loadTiles = makeRouteLoader((tx, ty) => tilePixels(`terrain/route/${tx}_${ty}.png`), () => fetch('terrain/route/index.json').then((r) => r.json()));
-async function routeFor(ll) {
-  const [{ grid, added }, w] = await Promise.all([loadTiles(...ll), engine()]);
+async function routeFor(ll, toEdge = false) {
+  const [{ grid, added }, w] = await Promise.all([loadTiles(...ll, toEdge), engine()]);
   if (w && added) w.setRoute(grid);
   return grid;
 }
@@ -75,10 +75,10 @@ function lakeOptions() {
 }
 function lakeFacts(l) {
   const vol = l.volSrc === 'survey' ? [t('lake.volSurvey'), `${num(l.survey, 2)} ${lang === 'ne' ? 'दस लाख घन मि.' : 'million m³'}`]
-    : l.volSrc === 'area' ? [t('lake.volArea'), `${num(l.vol[0], 1)}–${num(l.vol[1], 1)} ${lang === 'ne' ? 'दस लाख घन मि.' : 'million m³'}`] : null;
+    : l.volSrc === 'area' ? [t('lake.volArea'), `${num(l.vol[0], l.vol[1] < 10 ? 2 : 0)}–${num(l.vol[1], l.vol[1] < 10 ? 2 : 0)} ${lang === 'ne' ? 'दस लाख घन मि.' : 'million m³'}`] : null;
   return fields([[t('lake.rank'), `<span style="color:${LAKE_RANK_COLOR[l.rank]};font-weight:600">${t('lake.rank' + l.rank)}</span>`],
     [t('lake.basin'), lang === 'ne' ? l.basin[1] : l.basin[0]], [t('lake.country'), lang === 'ne' ? l.country[1] : l.country[0]],
-    [t('lake.id'), l.id], vol]);
+    l.area && [t('lake.area'), `${num(l.area, 2)} ${lang === 'ne' ? 'वर्ग कि.मि.' : 'km²'} (Sentinel-2, ${day(l.areaDate)})`], [t('lake.id'), l.id], vol]);
 }
 export function openLakeScenario(l) { G = { lake: l, vol: l.vol ? l.vol.slice() : null, res: null, t: 0, playing: false, last: 0 }; location.hash = '#/glof'; }
 
@@ -98,8 +98,8 @@ function lakesThrough(cell) {
 }
 async function traceRiver(el, ll, live) {
   el.innerHTML = `<div class="callout"><p class="note">${t('loading')}</p></div>`;
-  const grid = await routeFor(ll); await lakesReady; if (!live()) return;
-  const path = js.tracePath(grid, ...ll);
+  const grid = await routeFor(ll, true); await lakesReady; if (!live()) return;
+  const path = js.tracePath(grid, ...ll, 6000, false); // follow the river across the plains to the map edge
   const cell = Math.floor((30.5 - ll[1]) / ROUTE.step) * ROUTE.nx + Math.floor((ll[0] - 79.9) / ROUTE.step);
   // a gauge counts only if its nearest mapped river cell lies on this path (gauges just up a tributary do not)
   const onPath = new Map(), pathCells = path.map((q) => Math.floor((30.5 - q.ll[1]) / ROUTE.step) * ROUTE.nx + Math.floor((q.ll[0] - 79.9) / ROUTE.step));
@@ -114,7 +114,7 @@ async function traceRiver(el, ll, live) {
   const names = [...new Set(gauges.map((g) => riverOf(g.r.name)))];
   const near = placesAlong(path).filter((x) => x.p.t === 'm').slice(0, 8);
   const lakes = lakesThrough(cell), end = path.at(-1);
-  el.innerHTML = `<div class="callout" style="--sel:#0A6787">
+  el.innerHTML = `<div class="callout scenario" style="--sel:${SCENARIO.ink}">
     <h3>${names.length ? esc(names[0]) : t('river.unnamed')}</h3>
     ${fields([[t('river.length'), `${num(end.km)} ${t('km')}`], [t('river.drop'), `${num(path[0].z)} ${t('m')} ${t('river.to')} ${num(end.z)} ${t('m')}`],
       names.length > 1 && [t('river.becomes'), names.map(esc).join(', ')], near.length && [t('river.near'), near.map((x) => esc(name(x.p))).join(', ')]])}
@@ -125,7 +125,7 @@ async function traceRiver(el, ll, live) {
     <p class="note">${t('river.ends')}</p></div>`;
   el.querySelectorAll('[data-lake]').forEach((b) => (b.onclick = () => openLakeScenario(LAKES.find((l) => l.id === b.dataset.lake))));
   RT = { t: 0, last: 0 };
-  map.clearPath(); map.setTrace(path.map((q) => q.ll)); map.setMarker(ll, '#05475F');
+  map.clearPath(); map.setTrace(path.map((q) => q.ll)); map.setMarker(ll, SCENARIO.ink);
   map.flyTo(...path[Math.floor(path.length / 2)].ll, Math.min(520, 80 + end.km * 0.9));
 }
 
@@ -144,8 +144,9 @@ const mapView = {
       <nav class="actions noprint"><a href="#/glof">${t('tryGlof')}${arrow}</a><a href="#/quake">${t('tryQuake')}${arrow}</a><a href="#/data">${t('allData')}${arrow}</a></nav>`;
   },
   onPick({ layer, item, ground }, live = () => true) {
-    const el = document.getElementById('sel'); if (!el || ground) return;
-    if (layer === 'network') return traceRiver(el, item.ll, () => live() && state.view === mapView);
+    const el = document.getElementById('sel'); if (!el) return;
+    // a river, or any spot on the ground: follow the water downstream from there
+    if (layer === 'network' || ground) return traceRiver(el, ground || item.ll, () => live() && state.view === mapView);
     RT = null; map.clearTrace();
     if (layer === 'lakes') {
       map.setMarker(item.ll, LAKE_RANK_COLOR[item.rank]);
@@ -154,7 +155,8 @@ const mapView = {
       return;
     }
     map.setMarker(item.ll, LAYER_COLOR[layer]);
-    el.innerHTML = `<div class="callout" style="--sel:${LAYER_COLOR[layer]}">${layer === 'rivers' ? riverCard(item) : layer === 'rain' ? rainCard(item) : layer === 'quakes' ? quakeCard(item) : incidentCard(item)}</div>`;
+    el.innerHTML = `<div class="callout" style="--sel:${LAYER_COLOR[layer]}">${layer === 'rivers' ? riverCard(item) : layer === 'rain' ? rainCard(item) : layer === 'quakes' ? quakeCard(item) : incidentCard(item)}${layer === 'rivers' ? `<p><button class="btn ghost" type="button" id="tracego">${t('river.traceBtn')}</button></p>` : ''}</div>`;
+    el.querySelector('#tracego')?.addEventListener('click', () => traceRiver(el, item.ll, () => live() && state.view === mapView));
   },
   onFrame(now) {
     if (!RT || RT.t >= 1) return false;
@@ -289,7 +291,9 @@ const glofView = {
     const showLake = () => {
       sel.value = G.lake.id; v0.value = G.vol ? G.vol[0] : ''; v1.value = G.vol ? G.vol[1] : '';
       el.querySelector('#lakefacts').innerHTML = lakeFacts(G.lake);
-      el.querySelector('#volnote').textContent = G.lake.volSrc === 'survey' ? (lang === 'ne' ? 'पूर्वनिर्धारित दायरा: सर्वेक्षण गरिएको आयतनको आधादेखि पूरै।' : 'Default range: half to all of the surveyed volume.') : G.lake.volSrc ? '' : t('lake.volNone');
+      el.querySelector('#volnote').textContent = G.lake.volSrc === 'survey' ? (lang === 'ne' ? 'पूर्वनिर्धारित दायरा: सर्वेक्षण गरिएको आयतनको आधादेखि पूरै।' : 'Default range: half to all of the surveyed volume.')
+        : G.lake.frozen ? t('lake.frozenNote')
+        : G.lake.volSrc === 'area' ? (lang === 'ne' ? 'पूर्वनिर्धारित दायरा: स्याटेलाइटबाट नापिएको क्षेत्रफलबाट अनुमान (Huggel र अन्य २००२) को ०.७ देखि १.५ गुणा। आफू चाहे बदल्न सक्नुहुन्छ।' : 'Default range: 0.7 to 1.5 times the estimate from the satellite-measured area (Huggel et al. 2002). You can change it.') + (G.lake.area > 2 ? ' ' + t('lake.bigNote') : '') : t('lake.volNone');
     };
     G.select = (l) => { G.lake = l; G.vol = l.vol ? l.vol.slice() : null; showLake(); map.setMarker(l.ll, LAKE_RANK_COLOR[l.rank]); map.flyTo(...l.ll, 200); routeFor(l.ll); };
     sel.onchange = () => G.select(LAKES.find((x) => x.id === sel.value));
@@ -361,7 +365,7 @@ function showResult(el) {
     <h2>${t('glof.result')}</h2>
     <div class="timeline noprint"><button class="btn ghost" id="play" type="button"></button>
       <input id="tslider" type="range" min="0" max="${end}" step="any" aria-label="${t('glof.time')}"><output id="tout"></output></div>
-    <p class="fronts noprint"><span style="--c:#0A6787">${lang === 'ne' ? 'छिटो आइपुग्ने अग्रभाग' : 'Earliest front'}</span><span style="--c:#B97800">${lang === 'ne' ? 'ढिलो आइपुग्ने अग्रभाग' : 'Latest front'}</span></p>
+    <p class="fronts noprint"><span style="--c:${SCENARIO.ink}">${lang === 'ne' ? 'छिटो आइपुग्ने अग्रभाग' : 'Earliest front'}</span><span style="--c:${SCENARIO.late};--o:${SCENARIO.ink}">${lang === 'ne' ? 'ढिलो आइपुग्ने अग्रभाग' : 'Latest front'}</span></p>
     <div class="tw"><table><thead><tr><th>${t('glof.place')}</th><th>${t('glof.dist')}</th><th>${t('glof.arrival')}</th><th>${t('glof.peak')}</th><th>${t('glof.depth')}</th></tr></thead>
     <tbody>${rows.map(({ p, q }) => `<tr><td>${esc(name(p))}</td><td class="n">${num(q.km)} ${t('km')}</td><td>${fmtH(q.arrivalH[0])} – ${fmtH(q.arrivalH[1])}</td><td class="n">${num(Math.round(q.peak[0] / 10) * 10)} – ${num(Math.round(q.peak[1] / 10) * 10)}</td><td class="n">${num(q.depth[0], 1)} – ${num(q.depth[1], 1)}</td></tr>`).join('')}</tbody></table></div>
     <p class="note">${t('glof.ends')}</p>
@@ -384,7 +388,7 @@ const quakeView = {
     Q ??= { M: 7.8, strike: 290, ll: [84.731, 28.231], label: { en: '2015 Gorkha epicentre (Barpak)', ne: '२०७२ गोरखा भूकम्पको केन्द्र (बारपाक)' }, r: 0, animating: false };
     el.innerHTML = `<h1>${t('quake.h')}</h1><p class="lead">${t('quake.lead')}</p>
       <div class="noprint">
-        <dl class="callout" style="--sel:#B8322A;animation:none"><dt>${t('quake.epi')}</dt><dd id="epi"></dd></dl><p class="note">${t('quake.tap')}</p>
+        <dl class="callout scenario" style="--sel:${SCENARIO.ink};animation:none"><dt>${t('quake.epi')}</dt><dd id="epi"></dd></dl><p class="note">${t('quake.tap')}</p>
         <label for="M" class="field-label">${t('quake.mag')} <output id="mo"></output></label><input id="M" type="range" min="5" max="8.6" step="0.1">
         <div class="row"><label class="f">${t('quake.strike')}<input id="S" type="number" min="0" max="359" step="5" inputmode="numeric"></label>
         <button class="btn" id="go" type="button">${t('quake.replay')}</button></div>
@@ -421,7 +425,7 @@ async function update(animate) {
     const a = [Q.ll[0] - (Math.sin(th) * half) / kx, Q.ll[1] - (Math.cos(th) * half) / 111.32], b = [Q.ll[0] + (Math.sin(th) * half) / kx, Q.ll[1] + (Math.cos(th) * half) / 111.32];
     renderQuakeTable();
     mapReady.then(() => {
-      map.setShaking(grid, a, b); map.setMarker(Q.ll, '#B8322A');
+      map.setShaking(grid, a, b); map.setMarker(Q.ll, SCENARIO.ink);
       if (animate) { Q.r = 0; Q.last = 0; Q.animating = true; } else map.setShakeRadius((Q.r = 800));
     });
     performance.mark('quake-shaking');
@@ -458,6 +462,8 @@ const aboutView = {
       <li>${ne ? 'घटना: बिपद पोर्टल' : 'Incidents: BIPAD portal'}: <a href="https://bipadportal.gov.np" rel="noopener">bipadportal.gov.np</a></li>
       <li>${ne ? 'जिल्लाहरू: नेपालको संविधान, अनुसूची ४ (धारा ५६(३))' : 'Districts: Constitution of Nepal, Schedule 4 (Article 56(3)), as published by the Nepal Law Commission'}. ${PROVINCES.flatMap((p) => p.d).length} ${ne ? 'जिल्ला' : 'districts'}.</li>
       <li>${ne ? 'भू-उचाइ: AWS Terrain Tiles (SRTM र अन्य सार्वजनिक DEM); सीमाना: Natural Earth' : 'Terrain: AWS Terrain Tiles (SRTM and other public elevation data); border: Natural Earth'}.</li>
+      <li>${ne ? 'नदीको बहाव दिशा: HydroSHEDS १५″ (Lehner, Verdin र Jarvis, २००८), नक्सांकित नदी रेखासँग मिलाइएको' : 'River flow directions: HydroSHEDS 15″ (Lehner, Verdin & Jarvis 2008), conditioned with mapped river lines'}: <a href="https://www.hydrosheds.org" rel="noopener">hydrosheds.org</a>.</li>
+      <li>${ne ? 'हिमताल: ICIMOD (२०२०) का ४७ सम्भावित खतरनाक हिमताल; Tsho Rolpa, Imja र Thulagi को आयतन ICIMOD (२०११) को २००९ सर्वेक्षणबाट; अरूको आयतन Sentinel-2 (ESA Copernicus) बाट नापिएको हालको क्षेत्रफल र Huggel र अन्य (२००२) को सूत्रबाट अनुमान' : 'Glacial lakes: the 47 potentially dangerous lakes in ICIMOD (2020). Volumes: ICIMOD (2011) 2009 bathymetric surveys for Tsho Rolpa, Imja Tsho and Thulagi; for the others, estimated from today’s water area measured on Sentinel-2 imagery (ESA Copernicus) with Huggel et al. (2002), V = 0.104·A^1.42, shown as 0.7–1.5 times the estimate (on the surveyed lakes the formula comes out 0–27% low)'}.</li>
     </ul>
     <h2>${ne ? 'तथ्यांक गुणस्तर जाँच' : 'Data checks'}</h2>
     <p class="note">${ne ? 'स्रोतमा उल्टिएका अक्षांश/देशान्तर सच्याइन्छ, असम्भव स्थान हटाइन्छ:' : 'Swapped latitude/longitude in the source is corrected; impossible locations are dropped:'}

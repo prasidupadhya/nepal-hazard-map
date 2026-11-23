@@ -1,0 +1,61 @@
+{
+ "label": "24-scenario-main-rivers",
+ "runs": 5,
+ "startup": {
+  "fcp": 508,
+  "content": 932,
+  "map": 3019,
+  "tbt": 305,
+  "kb": 439,
+  "jsKb": 163
+ },
+ "screens": {
+  "data": 370,
+  "glof": 30,
+  "quake": 259,
+  "about": 10,
+  "map": 8
+ },
+ "content": {
+  "GLOF result (cold route grid)": 2524,
+  "quake first shaking": 36,
+  "quake slider step": 306,
+  "data list open (rain)": 21,
+  "data list open (incidents)": 176,
+  "load older #1": 265,
+  "rows after older #1": 237,
+  "load older #2": 259,
+  "rows after older #2": 275,
+  "load older #3": 322,
+  "rows after older #3": 295
+ },
+ "scroll": {
+  "rain": {
+   "p50": 16.7,
+   "p95": 16.8,
+   "jank": 0.1
+  },
+  "incidents": {
+   "p50": 16.7,
+   "p95": 16.7,
+   "jank": 0
+  }
+ },
+ "frames": {
+  "map drag": {
+   "p50": 266.7,
+   "p95": 583.2,
+   "jank": 87.2
+  },
+  "GLOF animation": {
+   "p50": 233.4,
+   "p95": 283.4,
+   "jank": 91.5
+  },
+  "quake animation": {
+   "p50": 150,
+   "p95": 199.9,
+   "jank": 94.3
+  }
+ }
+}

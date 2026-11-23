@@ -1,0 +1,61 @@
+{
+ "label": "23-small-rivers-map-only",
+ "runs": 5,
+ "startup": {
+  "fcp": 492,
+  "content": 933,
+  "map": 3048,
+  "tbt": 325,
+  "kb": 439,
+  "jsKb": 163
+ },
+ "screens": {
+  "data": 378,
+  "glof": 23,
+  "quake": 284,
+  "about": 10,
+  "map": 7
+ },
+ "content": {
+  "GLOF result (cold route grid)": 2838,
+  "quake first shaking": 37,
+  "quake slider step": 234,
+  "data list open (rain)": 19,
+  "data list open (incidents)": 178,
+  "load older #1": 252,
+  "rows after older #1": 237,
+  "load older #2": 260,
+  "rows after older #2": 275,
+  "load older #3": 272,
+  "rows after older #3": 295
+ },
+ "scroll": {
+  "rain": {
+   "p50": 16.7,
+   "p95": 16.7,
+   "jank": 0
+  },
+  "incidents": {
+   "p50": 16.7,
+   "p95": 16.8,
+   "jank": 0
+  }
+ },
+ "frames": {
+  "map drag": {
+   "p50": 266.6,
+   "p95": 650,
+   "jank": 87.2
+  },
+  "GLOF animation": {
+   "p50": 266.7,
+   "p95": 333.3,
+   "jank": 90.6
+  },
+  "quake animation": {
+   "p50": 150,
+   "p95": 183.3,
+   "jank": 94.6
+  }
+ }
+}

@@ -14,6 +14,9 @@ and local authorities.
 | Flood / GLOF incidents | BIPAD (bipadportal.gov.np) | copied daily, archived by month |
 | Districts | Constitution of Nepal, Schedule 4 | `src/districts.js` |
 | Terrain | AWS Terrain Tiles (SRTM etc.), Natural Earth border | baked once by `scripts/bake-terrain.js` |
+| River flow directions | HydroSHEDS 15″ (Lehner, Verdin & Jarvis 2008) | `scripts/bake-terrain.js`, `scripts/bake-rivers.js` |
+| Glacial lakes | ICIMOD (2020) potentially dangerous glacial lakes, Table 5.6 | `scripts/data/pdgl-icimod-2020.json` → `scripts/build-lakes.js` |
+| Lake volumes | ICIMOD (2011) bathymetry for 3 lakes; others from Sentinel-2 water area (`scripts/lake-areas.js`) with Huggel et al. (2002) | `src/lakes.js` (generated) |
 | Typeface | Anek Latin (Ek Type), SIL Open Font License | `public/fonts/` (licence in `OFL.txt`) |
 
 Every copy records when it was made and how old the newest reading is; the

@@ -43,7 +43,7 @@ for (const [lang, want] of [['en', 'Kathmandu'], ['ne', 'काठमाडौ']
     for (const [x, y] of [[520, 470], [600, 430], [450, 520], [700, 420], [380, 560], [640, 500]]) { await d.mouse.click(x, y); await d.waitForTimeout(800); if (await d.$('#sel .callout h3')) { traced = true; break; } }
     await d.waitForTimeout(1500);
     const txt = traced ? await d.$eval('#sel', (e) => e.innerText) : '';
-    ok(traced && /Distance to the plains/.test(txt) && /Dangerous glacial lakes upstream/.test(txt), 'tapping a river opens a downstream trace');
+    ok(traced && /Followed for/.test(txt) && /Dangerous glacial lakes upstream/.test(txt), 'tapping the map opens a downstream trace');
   }
   await d.close();
 }
@@ -52,9 +52,10 @@ for (const [lang, want] of [['en', 'Kathmandu'], ['ne', 'काठमाडौ']
   ok((await d.$$eval('#lake option', (o) => o.length)) === 47, '47 lakes to choose from');
   const before = await d.$eval('#lake', (s) => s.value); await d.mouse.click(300, 450); await d.waitForTimeout(300);
   ok((await d.$eval('#lake', (s) => s.value)) === before && /lake circles/.test(await d.$eval('#hint', (h) => h.textContent)), 'a tap on bare ground keeps the lake and shows a hint');
-  const noVol = await d.$eval('#lake', (s) => [...s.options].find((o) => o.value === 'GL087945E27781N').value); await d.selectOption('#lake', noVol);
-  ok((await d.$eval('#v0', (i) => i.value)) === '', 'a lake without a published volume starts with an empty volume');
-  await d.click('#run'); ok(/Enter how much water/.test(await d.$eval('#volnote', (n) => n.textContent)), 'running without a volume asks for one');
+  await d.selectOption('#lake', 'GL087945E27781N'); // unsurveyed lake: volume estimated from its satellite-measured area
+  ok(+(await d.$eval('#v0', (i) => i.value)) > 0 && /satellite/.test(await d.$eval('#volnote', (n) => n.textContent)), 'an unsurveyed lake comes with a volume range from its measured area');
+  await d.fill('#v0', ''); await d.fill('#v1', ''); await d.click('#run');
+  ok(/Enter how much water/.test(await d.$eval('#volnote', (n) => n.textContent)), 'running with the volume cleared asks for one');
   await d.close(); }
 await page.goto(BASE + '#/glof'); await page.waitForSelector('#run'); await page.click('#run');
 await page.waitForSelector('#out table tbody tr', { timeout: 30000 });

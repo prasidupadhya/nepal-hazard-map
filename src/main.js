@@ -8,7 +8,9 @@ const $ = (s) => document.querySelector(s);
 export const panel = $('#panel');
 
 // map inks: hazard levels use amber/red only; everything else is a quiet ink
-export const LAYER_COLOR = { network: '#0A6787', lakes: '#B8322A', rivers: '#2F7F9A', rain: '#5B5FA6', quakes: '#6B4E2E', incidents: '#9C3D7A' };
+export const LAYER_COLOR = { network: '#0A6787', lakes: '#B8322A', rivers: '#2F7F9A', rain: '#5B5FA6', quakes: '#6B4E2E', incidents: '#3F4448' };
+// Scenario ink: only what a scenario or a trace draws uses these, so it never blends with the base map
+export const SCENARIO = { ink: '#FFD60A', late: '#1B2A32' };
 export const LAKE_RANK_COLOR = { I: '#B8322A', II: '#B97800', III: '#6B6556' };
 const riverColor = (r) => (r.status === 'DANGER LEVEL' ? '#B8322A' : r.status === 'WARNING LEVEL' ? '#B97800' : LAYER_COLOR.rivers);
 const sw = (k) => (k === 'network' ? `<span class="sw line"></span>` : `<span class="sw" style="background:${LAYER_COLOR[k]}"></span>`);
@@ -39,7 +41,7 @@ $('#chips').onclick = (e) => {
   const k = b.dataset.l; state.layers[k] = !state.layers[k]; b.setAttribute('aria-pressed', state.layers[k]); map.showLayer(k, state.layers[k]);
 };
 // The map key and the user's layer choices apply on the map view; scenario screens pass the layers they need.
-export function showChips(on, only) { $('#chips').hidden = !on; for (const k in state.layers) map.showLayer(k, only ? only.includes(k) : on && state.layers[k]); }
+export function showChips(on, only) { $('#chips').hidden = !on; map.setNetworkMin(only ? 1000 : 0); for (const k in state.layers) map.showLayer(k, only ? only.includes(k) : on && state.layers[k]); }
 
 // ---------- scale bar + north arrow ----------
 const NICE = [1, 2, 5, 10, 20, 50, 100, 200, 500];
@@ -48,6 +50,14 @@ function onView({ kmPerPx, azimuth }) {
   $('#scalebar').style.width = (km / kmPerPx).toFixed(1) + 'px';
   if ($('#scalelabel').textContent !== label) $('#scalelabel').textContent = label;
   $('#northbtn svg').style.transform = `rotate(${azimuth.toFixed(3)}rad)`;
+  // rivers smaller than 250 km²: fetched the first time someone zooms in close on the map view (not in scenarios)
+  if (kmPerPx < 0.35 && state.rivers && !state.rivers.small && !state.view?.layers) {
+    state.rivers.small = decodeRivers('terrain/rivers-small.json').then((j) => {
+      const all = state.rivers.polys.concat(j.polys); state.rivers.polys = all;
+      all.forEach((pl, i) => pl.cells.forEach((c) => state.rivers.cellReach.has(c) || state.rivers.cellReach.set(c, i)));
+      map.setRiverNetwork(all);
+    });
+  }
 }
 $('#northbtn').onclick = () => map.resetNorth();
 
@@ -128,13 +138,17 @@ function simplify(pts, tol) {
   return pts.filter((_, k) => keep[k]);
 }
 // river network from public/terrain/rivers.json (start cell + D8 codes per reach)
-export async function loadRivers() {
-  const j = await (await fetch('terrain/rivers.json')).json(), { ROUTE, D8, cellLL } = await import('./grid.js');
-  const polys = j.lines.map(([start, codes, km2]) => {
+async function decodeRivers(url) {
+  const j = await (await fetch(url)).json(), { ROUTE, D8, cellLL } = await import('./grid.js');
+  j.polys = j.lines.map(([start, codes, km2]) => {
     let i = start % ROUTE.nx, jj = Math.floor(start / ROUTE.nx); const pts = [cellLL(ROUTE, i, jj)], cells = [start];
     for (const c of codes) { i += D8[c - 1][0]; jj += D8[c - 1][1]; pts.push(cellLL(ROUTE, i, jj)); cells.push(jj * ROUTE.nx + i); }
     return { pts: simplify(pts, ROUTE.step * 0.6), cells, km2 }; // drawn simplified; cells keep full detail for tracing
   });
+  return j;
+}
+export async function loadRivers() {
+  const j = await decodeRivers('terrain/rivers.json'), polys = j.polys;
   const cellReach = new Map(); polys.forEach((pl, i) => pl.cells.forEach((c) => cellReach.has(c) || cellReach.set(c, i)));
   state.rivers = { polys, lakes: j.lakes, cellReach };
   map.setRiverNetwork(polys);
