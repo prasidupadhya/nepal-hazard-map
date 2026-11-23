@@ -27,7 +27,8 @@ const uni = {
   map: { value: null }, overlay: { value: null }, overlayOn: { value: 0 },
   pal: { value: MMI_COLORS.map((c) => new THREE.Color(c)) },
   rupA: { value: new THREE.Vector2() }, rupB: { value: new THREE.Vector2() }, radius: { value: 0 },
-  detailOn: { value: 0 }, detailRect: { value: new THREE.Vector4() }, // x0, z0, x1, z1 of the sharp close-up block
+  // up to two close-up blocks (x0, z0, x1, z1) and how far each has replaced the overview (0..1, dithered dissolve)
+  rectA: { value: new THREE.Vector4() }, fA: { value: 0 }, rectB: { value: new THREE.Vector4() }, fB: { value: 0 },
 };
 
 export function heightAt(lon, lat) {
@@ -61,14 +62,17 @@ void main(){
   }
   vec4 mv = modelViewMatrix * vec4(p, 1.); vDepth = -mv.z; gl_Position = projectionMatrix * mv;
 }`;
-const frag = `uniform sampler2D map; uniform sampler2D overlay; uniform float overlayOn; uniform vec2 rupA; uniform vec2 rupB; uniform float radius; uniform float detailOn; uniform vec4 detailRect;
+const frag = `uniform sampler2D map; uniform sampler2D overlay; uniform float overlayOn; uniform vec2 rupA; uniform vec2 rupB; uniform float radius; uniform vec4 rectA; uniform float fA; uniform vec4 rectB; uniform float fB;
 ${FOG}
 varying vec2 vUv; varying vec2 vXZ; varying float vElev;
 uniform vec3 pal[11];
 vec3 mmiColor(float m){ int i = int(clamp(floor(m), 1., 9.)); return mix(pal[i], pal[i + 1], clamp(m - float(i), 0., 1.)); }
 float contour(float v, float step){ float f = v / step, w = max(fwidth(f), 1e-4); return w > .45 ? 0. : (1. - smoothstep(0., w * 1.4, abs(fract(f - .5) - .5))) * (1. - smoothstep(.2, .45, w)); }
 void main(){
-  if (detailOn > .5 && vXZ.x > detailRect.x && vXZ.x < detailRect.z && vXZ.y > detailRect.y && vXZ.y < detailRect.w) discard;
+  float hid = 0., ign = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(.06711056, .00583715)))); // same noise as the close-up shader
+  if (vXZ.x > rectA.x && vXZ.x < rectA.z && vXZ.y > rectA.y && vXZ.y < rectA.w) hid = max(hid, fA);
+  if (vXZ.x > rectB.x && vXZ.x < rectB.z && vXZ.y > rectB.y && vXZ.y < rectB.w) hid = max(hid, fB);
+  if (ign < hid) discard;
   vec3 base = texture2D(map, vUv).rgb;
   vec3 ink = vec3(.106,.165,.196);
   base = mix(base, ink, contour(vElev, 250.) * .09 + contour(vElev, 1000.) * .2);
@@ -104,7 +108,8 @@ export async function init(el, { onPick: pick, onFrame: frame } = {}) {
   camera = new THREE.PerspectiveCamera(40, 1, 1, 5000);
   camera.position.set(0, 1500, 260); // starts high above; the intro settles it
   controls = new MapControls(camera, renderer.domElement);
-  controls.enableDamping = true; controls.dampingFactor = 0.12;
+  controls.enableDamping = true; controls.dampingFactor = 0.08; // softer: wheel and trackpad steps blend into one glide
+  controls.zoomSpeed = 0.7; controls.zoomToCursor = true;
   controls.maxPolarAngle = 1.3; controls.minDistance = 25; controls.maxDistance = 1400;
   controls.addEventListener('change', () => { dirty = true; scheduleDetail(); });
   new ResizeObserver(resize).observe(el); resize();
@@ -161,17 +166,17 @@ function buildSlab(pos) {
 }
 
 // ---- sharp close-up terrain ----
-// Zoomed in, a 4×4 block of Terrarium elevation tiles (AWS Open Data, 38–135 m per pixel) replaces the overview
+// Zoomed in, a 4×4 block of Terrarium elevation tiles (AWS Open Data, 38–270 m per pixel) replaces the overview
 // surface around the view. Each tile is a fine mesh lit live with the overview's light and colours, so it stays sharp
 // at any zoom. Inside/outside Nepal comes from a mask drawn from the border polygon; a vector border line keeps
 // the edge crisp. Off on the earthquake screen (its overlay lives on the overview surface) and with Data Saver.
-const DN = 97, detail = { group: null, key: '', want: '', cache: new Map(), enabled: true, border: null, timer: 0, idx: null, mask: { value: null } };
+const DN = 65, detail = { layers: [], key: '', want: '', cache: new Map(), enabled: true, border: null, timer: 0, idx: null, mask: { value: null } };
 const mercX = (lon, z) => ((lon + 180) / 360) * 2 ** z;
 const mercY = (lat, z) => { const r = (lat * Math.PI) / 180; return ((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * 2 ** z; };
 const lonOf = (x, z) => (x / 2 ** z) * 360 - 180, latOf = (y, z) => (Math.atan(Math.sinh(Math.PI * (1 - (2 * y) / 2 ** z))) * 180) / Math.PI;
 const detailVert = `uniform float rise; attribute float elev; attribute vec2 buv; varying vec3 vN; varying float vElev; varying vec2 vBuv; varying float vDepth;
 void main(){ vN = normal; vElev = elev; vBuv = buv; vec3 p = position; p.y *= rise; vec4 mv = modelViewMatrix * vec4(p,1.); vDepth = -mv.z; gl_Position = projectionMatrix * mv; }`;
-const detailFrag = `uniform sampler2D nepalMask; ${FOG} varying vec3 vN; varying float vElev; varying vec2 vBuv;
+const detailFrag = `uniform sampler2D nepalMask; uniform float uF; ${FOG} varying vec3 vN; varying float vElev; varying vec2 vBuv;
 vec3 ramp(float e){
   vec3 c0 = vec3(200.,216.,178.), c1 = vec3(214.,222.,186.), c2 = vec3(228.,222.,196.), c3 = vec3(222.,211.,190.), c4 = vec3(214.,208.,202.), c5 = vec3(236.,238.,240.), c6 = vec3(252.,253.,255.);
   vec3 c = e < 300. ? mix(c0, c1, e / 300.) : e < 1000. ? mix(c1, c2, (e - 300.) / 700.) : e < 2000. ? mix(c2, c3, (e - 1000.) / 1000.)
@@ -180,8 +185,9 @@ vec3 ramp(float e){
 }
 float contour(float v, float step){ float f = v / step, w = max(fwidth(f), 1e-4); return w > .45 ? 0. : (1. - smoothstep(0., w * 1.4, abs(fract(f - .5) - .5))) * (1. - smoothstep(.2, .45, w)); }
 void main(){
+  if (fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(.06711056, .00583715)))) >= uF) discard; // dissolve in/out
   float shade = max(0., dot(normalize(vN), normalize(vec3(-.5, .62, -.6)))); // light from the north-west, as the overview
-  vec3 c = ramp(vElev) * min(1.15, .55 + .7 * shade);
+  vec3 c = ramp(vElev) * min(1.12, .42 + .88 * shade); // a little more contrast than the overview's baked shading: its mesh is smoother
   if (shade < .62) c *= 1. + (vec3(.86,.92,1.04) - 1.) * (.62 - shade) * 1.6;
   float inside = texture2D(nepalMask, vBuv).r;
   vec3 mist = vec3(231.,236.,234.) / 255. * min(1.1, .72 + .4 * shade);
@@ -189,39 +195,42 @@ void main(){
   c = mix(c, vec3(.106,.165,.196), contour(vElev, 250.) * .09 + contour(vElev, 1000.) * .2);
   gl_FragColor = vec4(mix(c, fogColor, smoothstep(fogNear, fogFar, vDepth)), 1.);
 }`;
-let detailMat = null;
-async function detailTile(z, x, y) {
+// tiles are fetched and built in a Web Worker (src/detail-worker.js), so zooming never blocks the main thread
+let worker = null, wid = 0; const pending = new Map();
+function detailTile(z, x, y) {
   const key = `${z}/${x}/${y}`;
   if (detail.cache.has(key)) return detail.cache.get(key);
-  const p = (async () => {
-    const px = await pixels(`https://elevation-tiles-prod.s3.amazonaws.com/terrarium/${z}/${x}/${y}.png`);
-    const h = (i, j) => { const k = (Math.min(255, j) * 256 + Math.min(255, i)) * 4; return Math.max(0, px[k] * 256 + px[k + 1] + px[k + 2] / 256 - 32768); };
-    const n = DN, pos = new Float32Array(n * n * 3), el = new Float32Array(n * n), buv = new Float32Array(n * n * 2), nor = new Float32Array(n * n * 3);
-    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
-      const fx = (i / (n - 1)) * 255, fy = (j / (n - 1)) * 255, i0 = Math.floor(fx), j0 = Math.floor(fy), a = fx - i0, c = fy - j0;
-      const e = (h(i0, j0) * (1 - a) + h(i0 + 1, j0) * a) * (1 - c) + (h(i0, j0 + 1) * (1 - a) + h(i0 + 1, j0 + 1) * a) * c;
-      const lon = lonOf(x + i / (n - 1), z), lat = latOf(y + j / (n - 1), z), [sx, sz] = toXZ(lon, lat), k = j * n + i;
-      pos.set([sx, (e / 1000) * EXAG, sz], 3 * k); el[k] = e;
-      buv.set([(lon - BOX.w) / (BOX.e - BOX.w), (lat - BOX.s) / (BOX.n - BOX.s)], 2 * k);
-    }
-    const v = new THREE.Vector3(), q = (i, j) => 3 * (Math.max(0, Math.min(n - 1, j)) * n + Math.max(0, Math.min(n - 1, i)));
-    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
-      const l = q(i - 1, j), r = q(i + 1, j), u = q(i, j - 1), d = q(i, j + 1);
-      const ex = [pos[r] - pos[l], pos[r + 1] - pos[l + 1], pos[r + 2] - pos[l + 2]], ez = [pos[d] - pos[u], pos[d + 1] - pos[u + 1], pos[d + 2] - pos[u + 2]];
-      v.set(ez[1] * ex[2] - ez[2] * ex[1], ez[2] * ex[0] - ez[0] * ex[2], ez[0] * ex[1] - ez[1] * ex[0]).normalize(); if (v.y < 0) v.negate();
-      nor.set([v.x, v.y, v.z], 3 * (j * n + i));
-    }
-    if (!detail.idx) { const ix = []; for (let j = 0; j < n - 1; j++) for (let i = 0; i < n - 1; i++) { const a = j * n + i; ix.push(a, a + n, a + 1, a + 1, a + n, a + n + 1); } detail.idx = new THREE.BufferAttribute(new Uint32Array(ix), 1); }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
-    g.setAttribute('elev', new THREE.BufferAttribute(el, 1)); g.setAttribute('buv', new THREE.BufferAttribute(buv, 2)); g.setIndex(detail.idx);
-    g.computeBoundingSphere();
-    detailMat ??= new THREE.ShaderMaterial({ uniforms: { ...common, nepalMask: detail.mask }, vertexShader: detailVert, fragmentShader: detailFrag });
-    return new THREE.Mesh(g, detailMat);
-  })();
+  if (!worker) {
+    worker = new Worker(new URL('./detail-worker.js', import.meta.url), { type: 'module' });
+    worker.onmessage = ({ data }) => { const p = pending.get(data.id); pending.delete(data.id); if (!p) return; data.error ? p.reject(new Error(data.error)) : p.resolve(data); };
+  }
+  const p = new Promise((resolve, reject) => { const id = ++wid; pending.set(id, { resolve, reject }); worker.postMessage({ id, z, x, y, n: DN, C, KX, KY: KM_PER_DEG_LAT, EXAG, BOX }); })
+    .then(({ pos, el, buv, nor }) => {
+      if (!detail.idx) { const n = DN, ix = []; for (let j = 0; j < n - 1; j++) for (let i = 0; i < n - 1; i++) { const a = j * n + i; ix.push(a, a + n, a + 1, a + 1, a + n, a + n + 1); } detail.idx = new THREE.BufferAttribute(new Uint32Array(ix), 1); }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+      g.setAttribute('elev', new THREE.BufferAttribute(el, 1)); g.setAttribute('buv', new THREE.BufferAttribute(buv, 2)); g.setIndex(detail.idx);
+      g.computeBoundingSphere(); return g;
+    });
   detail.cache.set(key, p); p.catch(() => detail.cache.delete(key));
-  if (detail.cache.size > 64) { const [k0, p0] = detail.cache.entries().next().value; detail.cache.delete(k0); p0.then((m) => m.geometry.dispose()).catch(() => {}); }
+  if (detail.cache.size > 64) { const [k0, p0] = detail.cache.entries().next().value; detail.cache.delete(k0); p0.then((g) => g.dispose()).catch(() => {}); }
   return p;
+}
+// Close-up blocks on screen: each dissolves toward its target (1 = shown, 0 = gone) over FADE_MS.
+const FADE_MS = 350;
+function stepDetail(dt) {
+  let moving = false;
+  for (const L of detail.layers) {
+    const f = L.uF.value, next = L.target > f ? Math.min(1, f + dt / FADE_MS) : Math.max(0, f - dt / FADE_MS);
+    if (next !== f) { L.uF.value = REDUCED ? L.target : next; moving = true; }
+  }
+  for (const L of detail.layers.filter((l) => l.target === 0 && l.uF.value === 0)) { scene.remove(L.group); detail.layers.splice(detail.layers.indexOf(L), 1); }
+  while (detail.layers.length > 2) { const L = detail.layers.shift(); scene.remove(L.group); } // rapid changes: drop the oldest
+  const [A, B] = detail.layers;
+  uni.fA.value = A ? A.uF.value : 0; if (A) uni.rectA.value.copy(A.rect);
+  uni.fB.value = B ? B.uF.value : 0; if (B) uni.rectB.value.copy(B.rect);
+  if (detail.border) detail.border.visible = detail.layers.some((l) => l.target === 1);
+  return moving;
 }
 async function loadBorder() {
   const ring = await (await fetch('terrain/border.json')).json(), seg = [];
@@ -239,9 +248,14 @@ export function setDetailEnabled(on) { detail.enabled = on; scheduleDetail(); }
 function scheduleDetail() { clearTimeout(detail.timer); detail.timer = setTimeout(updateDetail, 300); }
 async function updateDetail() {
   if (!camera || hidden) return;
-  const dist = camera.position.distanceTo(controls.target), z = Math.min(12, Math.floor(Math.log2(141600 / dist)));
-  const off = () => { if (detail.group) detail.group.visible = false; if (detail.border) detail.border.visible = false; uni.detailOn.value = 0; detail.key = detail.want = ''; dirty = true; };
-  if (!detail.enabled || z < 10 || navigator.connection?.saveData || uni.overlayOn.value > 0.5) return off();
+  // Tile level from the screen scale: the finest level whose pixels match the screen (zRes), but coarse enough that
+  // a 4×4 block covers the visible width (zCov). On when the overview texture (~0.4 km per texel) would be magnified.
+  const dist = camera.position.distanceTo(controls.target), kmPerPx = (2 * dist * Math.tan((camera.fov * Math.PI) / 360)) / cssH;
+  const widthKm = kmPerPx * Math.max(1, host.clientWidth - inset), TILE0 = 35400; // km across a zoom-0 tile at Nepal's latitude
+  const zRes = Math.round(Math.log2(TILE0 / 256 / kmPerPx)), zCov = Math.floor(Math.log2((4 * TILE0) / (1.25 * widthKm)));
+  const z = Math.min(12, zRes, zCov);
+  const off = () => { for (const L of detail.layers) L.target = 0; detail.key = detail.want = ''; dirty = true; };
+  if (!detail.enabled || kmPerPx > 0.45 || z < 9 || navigator.connection?.saveData || uni.overlayOn.value > 0.5) return off();
   const [lon, lat] = toLL(controls.target.x, controls.target.z);
   if (lon < BOX.w || lon > BOX.e || lat < BOX.s || lat > BOX.n) return off();
   const fx = mercX(lon, z), fy = mercY(lat, z), x0 = Math.round(fx) - 2, y0 = Math.round(fy) - 2, tiles = [];
@@ -253,14 +267,14 @@ async function updateDetail() {
   if (key === detail.key || key === detail.want) return;
   detail.want = key;
   if (!detail.border) { try { await loadBorder(); } catch { return off(); } }
-  let meshes; try { meshes = await Promise.all(tiles.map((t) => detailTile(...t))); } catch { return; }
+  let geos; try { geos = await Promise.all(tiles.map((t) => detailTile(...t))); } catch { return; }
   if (detail.want !== key) return; // the view moved on meanwhile
-  if (detail.group) scene.remove(detail.group);
-  detail.group = new THREE.Group(); meshes.forEach((m) => detail.group.add(m)); scene.add(detail.group);
+  const uF = { value: 0 }, mat = new THREE.ShaderMaterial({ uniforms: { ...common, nepalMask: detail.mask, uF }, vertexShader: detailVert, fragmentShader: detailFrag });
+  const group = new THREE.Group(); geos.forEach((g) => group.add(new THREE.Mesh(g, mat))); scene.add(group);
   const [ax, az] = toXZ(Math.max(BOX.w, lonOf(x0, z)), Math.min(BOX.n, latOf(y0, z))), [bx, bz] = toXZ(Math.min(BOX.e, lonOf(x0 + 4, z)), Math.max(BOX.s, latOf(y0 + 4, z)));
-  uni.detailRect.value.set(ax, az, bx, bz); uni.detailOn.value = 1; detail.key = key;
-  if (detail.border) detail.border.visible = true;
-  dirty = true;
+  for (const L of detail.layers) L.target = 0;
+  detail.layers.push({ group, uF, target: 1, rect: new THREE.Vector4(ax, az, bx, bz) });
+  detail.key = key; dirty = true;
 }
 
 // The one orchestrated moment: the relief rises out of the mist while the camera settles.
@@ -293,20 +307,26 @@ export const requestRender = () => { dirty = true; };
 // they are slow (cheap phone GPUs are fill-rate bound) and raise it when there is headroom.
 const MAX_PR = Math.min(devicePixelRatio, 2);
 let pr = MAX_PR, lastT = 0, prevRendered = false; const ft = [];
+// Each change resizes the drawing buffer (a hitch and a visible sharpness change), so: step down only after a
+// sustained slow spell (40 frames), and step back up only once the view has been still for a moment.
+let stillSince = 0;
+const setPR = (v) => { if (v === pr) return; pr = v; renderer.setPixelRatio(pr); ptUni.pr.value = pr; resize(); };
 function adapt(now, rendered) {
   const d = now - lastT, cont = rendered && prevRendered; lastT = now; prevRendered = rendered;
-  if (!rendered) return;
+  if (!rendered) { if (!stillSince) stillSince = now; else if (pr < MAX_PR && now - stillSince > 1200 && ft.lowFor < 3) { setPR(Math.min(MAX_PR, pr + 0.25)); ft.lowFor = (ft.lowFor || 0) + 1; dirty = true; } return; }
+  stillSince = 0;
   if (!cont) { ft.length = 0; return; } // only judge back-to-back frames
-  ft.push(d); if (ft.length < 20) return;
-  const m = ft.sort((a, b) => a - b)[10]; ft.length = 0;
-  const next = m > 24 ? Math.max(1, pr - 0.25) : m < 14 ? Math.min(MAX_PR, pr + 0.25) : pr;
-  if (next !== pr) { pr = next; renderer.setPixelRatio(pr); ptUni.pr.value = pr; resize(); }
+  ft.push(d); if (ft.length < 40) return;
+  const m = ft.sort((a, b) => a - b)[20]; ft.length = 0;
+  if (m > 28) { setPR(Math.max(1, pr - 0.25)); ft.lowFor = 0; }
 }
 
 function loop(now) {
   requestAnimationFrame(loop);
   if (anim) { const p = Math.min(1, (now - anim.t0) / anim.ms); anim.step(p < 0.5 ? 4 * p * p * p : 1 - (-2 * p + 2) ** 3 / 2); if (p >= 1) { anim = null; scheduleDetail(); } dirty = true; }
   if (onFrame && onFrame(now)) dirty = true;
+  if (detail.layers.length && stepDetail(Math.min(50, now - (loop.last || now)))) dirty = true;
+  loop.last = now;
   const moved = controls.update();
   adapt(now, dirty || moved);
   if ((dirty || moved) && !hidden) {
