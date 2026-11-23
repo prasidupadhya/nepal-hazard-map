@@ -5,6 +5,7 @@ import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { BOX, VIEW, kmPerDegLon, KM_PER_DEG_LAT } from './grid.js';
+import { fetchPNG } from './png.js';
 import { MMI_COLORS } from './colors.js';
 
 const C = { lon: (BOX.w + BOX.e) / 2, lat: (BOX.s + BOX.n) / 2 };
@@ -38,12 +39,7 @@ export function heightAt(lon, lat) {
   return ((heights[k] * (1 - a) + heights[k + 1] * a) * (1 - b) + (heights[k + VIEW.nx] * (1 - a) + heights[k + VIEW.nx + 1] * a) * b) / 1000 * EXAG;
 }
 
-async function pixels(url) {
-  const bmp = await createImageBitmap(await (await fetch(url)).blob(), { colorSpaceConversion: 'none', premultiplyAlpha: 'none' });
-  const c = new OffscreenCanvas(bmp.width, bmp.height), g = c.getContext('2d', { willReadFrequently: true });
-  g.drawImage(bmp, 0, 0);
-  return g.getImageData(0, 0, bmp.width, bmp.height).data;
-}
+
 
 // Terrain: baked plaster-relief texture + contour lines (250 m / 1000 m) + earthquake overlay.
 // contour(): fwidth is 0 on flat triangles and smoothstep(0, 0, x) is undefined, hence max(…, 1e-4).
@@ -114,9 +110,9 @@ export async function init(el, { onPick: pick, onFrame: frame } = {}) {
   controls.addEventListener('change', () => { dirty = true; scheduleDetail(); });
   new ResizeObserver(resize).observe(el); resize();
 
-  const [h, tex] = await Promise.all([pixels('terrain/height.png'), new THREE.TextureLoader().loadAsync('terrain/texture-1024.jpg')]);
+  const [h, tex] = await Promise.all([fetchPNG('terrain/height.png'), new THREE.TextureLoader().loadAsync('terrain/texture-1024.jpg')]);
   heights = new Float32Array(VIEW.nx * VIEW.ny);
-  for (let k = 0; k < heights.length; k++) heights[k] = (h[4 * k] / 2.68) ** 2; // see bake-terrain.js step 3
+  for (let k = 0; k < heights.length; k++) heights[k] = (h.data[h.ch * k] / 2.68) ** 2; // see bake-terrain.js step 3
   tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
   uni.map.value = tex;
   const ov = new THREE.DataTexture(new Uint8Array(VIEW.nx * VIEW.ny), VIEW.nx, VIEW.ny, THREE.RedFormat);
@@ -617,7 +613,7 @@ export function printImage({ bounds, cw = 1000, ch = 540, k = 2, km = 'km' }) {
   const kmPerPx = (2 * dist * ty) / ch, nice = [1, 2, 5, 10, 20, 25, 50, 100, 200].filter((v) => v / kmPerPx <= cw * 0.2).pop() || 1, bw = nice / kmPerPx;
   c.setTransform(k, 0, 0, k, 0, 0);
   const bx = 14, by = ch - 16;
-  c.fillStyle = 'rgba(255,255,255,.88)'; c.beginPath(); c.roundRect(bx - 8, by - 28, bw + 16 + 40, 38, 5); c.fill();
+  c.fillStyle = 'rgba(255,255,255,.88)'; c.beginPath(); if (c.roundRect) c.roundRect(bx - 8, by - 28, bw + 16 + 40, 38, 5); else c.rect(bx - 8, by - 28, bw + 16 + 40, 38); c.fill();
   c.fillStyle = '#1b2a32'; c.fillRect(bx, by - 5, bw / 2, 5); c.strokeStyle = '#1b2a32'; c.lineWidth = 1; c.strokeRect(bx + 0.5, by - 5 + 0.5, bw - 1, 5 - 1);
   c.font = '600 12px Anek, "Noto Sans Devanagari", system-ui, sans-serif'; c.textBaseline = 'alphabetic';
   c.fillText('0', bx - 2, by - 10); const lab = km(nice); c.fillText(lab, bx + bw - c.measureText(lab).width / 2, by - 10);

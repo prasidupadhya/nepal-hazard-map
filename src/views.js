@@ -7,6 +7,7 @@ import { PROVINCES } from './districts.js';
 import { VIEW, ROUTE, D8, BOX } from './grid.js';
 import { makeRouteLoader } from './route-tiles.js';
 import * as js from './scenario.js';
+import { fetchPNG } from './png.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const ROMAN = js.ROMAN;
@@ -101,10 +102,10 @@ function arrivalChart(res, rows) {
 // Scenario engine: Rust→WASM when available (faster on phones), JS otherwise. Same results (tested).
 let engineP = null;
 const engine = () => (engineP ??= import('./scenario-wasm.js').then((m) => m.loadWasm('wasm/scenario.wasm')).catch(() => null));
+// decoded in JavaScript, byte-exact: a canvas read-back can be altered (see png.js), which breaks river directions
 async function tilePixels(url) {
-  const bmp = await createImageBitmap(await (await fetch(url)).blob(), { colorSpaceConversion: 'none', premultiplyAlpha: 'none' });
-  const c = new OffscreenCanvas(bmp.width, bmp.height).getContext('2d', { willReadFrequently: true }); c.drawImage(bmp, 0, 0);
-  return { w: bmp.width, h: bmp.height, rgb: c.getImageData(0, 0, bmp.width, bmp.height).data };
+  const { w, h, data } = await fetchPNG(url);
+  return { w, h, rgb: data };
 }
 const loadTiles = makeRouteLoader((tx, ty) => tilePixels(`terrain/route/${tx}_${ty}.png`), () => fetch('terrain/route/index.json').then((r) => r.json()));
 async function routeFor(ll) {
@@ -188,8 +189,8 @@ const mapView = {
     await dataReady; if (!live()) return;
     showChips(true); map.clearPath(); map.clearShaking();
     const L = state.latest, high = L.rivers.filter((r) => r.status && r.status !== 'BELOW WARNING LEVEL');
-    el.innerHTML = `<h1>${t('title')}</h1><p class="lead">${t('mapLead')} ${t('river.tap')}</p>
-      <div id="sel"></div>
+    // the tapped item comes first: on a phone the panel starts right under the map, so it is seen at once
+    el.innerHTML = `<div id="sel"></div><h1>${t('title')}</h1><p class="lead">${t('mapLead')} ${t('river.tap')}</p>
       ${feedCards()}
       <h2>${t('aboveWarn')}</h2>
       ${high.length ? `<ul class="list">${high.map(riverRow).join('')}</ul>` : `<p class="note">${t('noneAbove')}</p>`}
@@ -197,6 +198,8 @@ const mapView = {
   },
   onPick({ layer, item, ground }, live = () => true) {
     const el = document.getElementById('sel'); if (!el) return;
+    // phones: the details open at the top of the sheet, so bring the sheet back up if it was scrolled
+    if (matchMedia('(max-width: 860px)').matches && scrollY > 0) scrollTo({ top: 0, behavior: REDUCED ? 'auto' : 'smooth' });
     // a river, or any spot on the ground: follow the water downstream from there
     if (layer === 'network' || ground) return traceRiver(el, ground || item.ll, () => live() && state.view === mapView);
     RT = null; map.clearTrace();

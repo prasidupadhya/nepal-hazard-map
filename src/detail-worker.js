@@ -1,15 +1,13 @@
+import { fetchPNG } from './png.js';
 // Builds close-up terrain tiles off the main thread, so zooming never freezes:
 // fetch a Terrarium elevation tile, decode it, and compute mesh positions, normals, elevations and texture coords.
 // Inputs mirror map3d.js (scene centre, km per degree, exaggeration, map box); outputs are transferred, not copied.
 const lonOf = (x, z) => (x / 2 ** z) * 360 - 180, latOf = (y, z) => (Math.atan(Math.sinh(Math.PI * (1 - (2 * y) / 2 ** z))) * 180) / Math.PI;
 self.onmessage = async ({ data: { id, z, x, y, n, C, KX, KY, EXAG, BOX } }) => {
   try {
-    const r = await fetch(`https://elevation-tiles-prod.s3.amazonaws.com/terrarium/${z}/${x}/${y}.png`);
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const bmp = await createImageBitmap(await r.blob(), { colorSpaceConversion: 'none', premultiplyAlpha: 'none' });
-    const cv = new OffscreenCanvas(256, 256).getContext('2d', { willReadFrequently: true }); cv.drawImage(bmp, 0, 0);
-    const px = cv.getImageData(0, 0, 256, 256).data;
-    const h = (i, j) => { const k = (Math.min(255, j) * 256 + Math.min(255, i)) * 4; return Math.max(0, px[k] * 256 + px[k + 1] + px[k + 2] / 256 - 32768); };
+    // decoded in JavaScript: a canvas read-back can carry anti-fingerprinting noise (see png.js), i.e. spikes of ±256 m
+    const { w, ch, data: px } = await fetchPNG(`https://elevation-tiles-prod.s3.amazonaws.com/terrarium/${z}/${x}/${y}.png`);
+    const h = (i, j) => { const k = (Math.min(w - 1, j) * w + Math.min(w - 1, i)) * ch; return Math.max(0, px[k] * 256 + px[k + 1] + px[k + 2] / 256 - 32768); };
     const pos = new Float32Array(n * n * 3), el = new Float32Array(n * n), buv = new Float32Array(n * n * 2), nor = new Float32Array(n * n * 3);
     for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
       const fx = (i / (n - 1)) * 255, fy = (j / (n - 1)) * 255, i0 = Math.floor(fx), j0 = Math.floor(fy), a = fx - i0, c = fy - j0;

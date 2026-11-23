@@ -122,7 +122,8 @@ export async function route() {
   await v.enter(panel, () => my === gen);
   if (my === gen) performance.mark('view:' + key);
 }
-window.addEventListener('hashchange', () => { route(); panel.scrollTop = 0; if (document.body.classList.contains('full')) window.scrollTo(0, 0); });
+// a new screen starts at the top: on phones the whole page scrolls, and the map must be in view again
+window.addEventListener('hashchange', () => { route(); panel.scrollTop = 0; window.scrollTo(0, 0); });
 
 // ---------- place names on the map (current language) ----------
 export function drawLabels() {
